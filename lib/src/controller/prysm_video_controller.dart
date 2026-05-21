@@ -109,14 +109,18 @@ class PrysmVideoController extends ChangeNotifier {
                   rebufferCount: _state.metrics.rebufferCount + 1,
                 )
               : _state.metrics;
+          // Preserve ended status when buffering oscillates after completion.
+          final newStatus = value
+              ? PrysmPlaybackStatus.buffering
+              : _state.completed
+              ? PrysmPlaybackStatus.ended
+              : _state.playing
+              ? PrysmPlaybackStatus.playing
+              : PrysmPlaybackStatus.ready;
           _update(
             _state.copyWith(
               buffering: value,
-              status: value
-                  ? PrysmPlaybackStatus.buffering
-                  : _state.playing
-                  ? PrysmPlaybackStatus.playing
-                  : PrysmPlaybackStatus.ready,
+              status: newStatus,
               metrics: metrics,
             ),
           );
@@ -157,7 +161,10 @@ class PrysmVideoController extends ChangeNotifier {
       )
       ..add(
         _backend.duration.listen(
-          (value) => _update(_state.copyWith(duration: value)),
+          (value) {
+            if (value == _state.duration) return;
+            _update(_state.copyWith(duration: value));
+          },
         ),
       )
       ..add(
@@ -191,6 +198,7 @@ class PrysmVideoController extends ChangeNotifier {
       )
       ..add(
         _backend.availableTracks.listen((value) {
+          if (value == _state.availableTracks) return;
           _update(
             _state.copyWith(
               availableTracks: value,
@@ -204,7 +212,10 @@ class PrysmVideoController extends ChangeNotifier {
       )
       ..add(
         _backend.selectedTracks.listen(
-          (value) => _update(_state.copyWith(selectedTracks: value)),
+          (value) {
+            if (value == _state.selectedTracks) return;
+            _update(_state.copyWith(selectedTracks: value));
+          },
         ),
       )
       ..add(
@@ -232,6 +243,11 @@ class PrysmVideoController extends ChangeNotifier {
           status: PrysmPlaybackStatus.opening,
           selectedQuality: selectedQuality,
           availableQualities: _qualitiesFromSource(source),
+          // Reset playback position so the UI never briefly shows stale state
+          // from the previous video while the new source is loading.
+          position: Duration.zero,
+          duration: Duration.zero,
+          bufferedPosition: Duration.zero,
           clearError: true,
         ),
       );
@@ -419,6 +435,7 @@ class PrysmVideoController extends ChangeNotifier {
 
   void _update(PrysmVideoState next) {
     if (_disposed) return;
+    if (next == _state) return;
     _state = next;
     notifyListeners();
   }

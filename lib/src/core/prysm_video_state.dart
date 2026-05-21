@@ -139,4 +139,65 @@ class PrysmVideoState {
       metrics: metrics ?? this.metrics,
     );
   }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    if (other is! PrysmVideoState) return false;
+    return other.status == status &&
+        identical(other.source, source) &&
+        other.playing == playing &&
+        other.completed == completed &&
+        other.buffering == buffering &&
+        other.live == live &&
+        other.position == position &&
+        other.duration == duration &&
+        other.bufferedPosition == bufferedPosition &&
+        other.volume == volume &&
+        other.speed == speed &&
+        other.muted == muted &&
+        other.looping == looping &&
+        other.fullscreen == fullscreen &&
+        other.pictureInPicture == pictureInPicture &&
+        other.controlsLocked == controlsLocked &&
+        other.availableTracks == availableTracks &&
+        other.selectedTracks == selectedTracks &&
+        _listEquals(other.availableQualities, availableQualities) &&
+        other.selectedQuality == selectedQuality &&
+        identical(other.error, error) &&
+        other.metrics == metrics;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+      status,
+      source,
+      playing,
+      completed,
+      buffering,
+      live,
+      position,
+      duration,
+      bufferedPosition,
+      volume,
+      speed,
+      muted,
+      looping,
+      fullscreen,
+      pictureInPicture,
+      controlsLocked,
+      availableTracks,
+      selectedTracks,
+      selectedQuality,
+      metrics,
+  );
+
+  static bool _listEquals<T>(List<T> a, List<T> b) {
+    if (identical(a, b)) return true;
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
 }

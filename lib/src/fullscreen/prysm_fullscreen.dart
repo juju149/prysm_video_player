@@ -48,7 +48,11 @@ class _FullscreenShellState extends State<_FullscreenShell> {
   @override
   void initState() {
     super.initState();
-    unawaited(widget.controller.enterFullscreen());
+    // Defer enterFullscreen so that notifyListeners() is not called during
+    // the widget's own mount phase (which would trigger setState-during-build).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(widget.controller.enterFullscreen());
+    });
     unawaited(
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky),
     );

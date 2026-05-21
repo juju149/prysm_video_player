@@ -214,6 +214,35 @@ class _PrysmVideoPlayerState extends State<PrysmVideoPlayer> {
                       pauseWhenBackgrounded: _config.pauseWhenBackgrounded,
                       resumeWhenForegrounded: _config.resumeWhenForegrounded,
                     ),
+                    // Always-visible state overlay: buffering spinner and
+                    // error panel are shown regardless of controls visibility
+                    // so users always have feedback.
+                    if (_config.showControls)
+                      AnimatedBuilder(
+                        animation: _controller,
+                        builder: (context, child) {
+                          final state = _controller.state;
+                          if (state.error != null) {
+                            return Center(
+                              child: _ErrorOverlay(
+                                controller: _controller,
+                                state: state,
+                                theme: widget.theme,
+                              ),
+                            );
+                          }
+                          if (state.buffering ||
+                              state.status ==
+                                  PrysmPlaybackStatus.opening) {
+                            return Center(
+                              child: _LoadingOverlay(theme: widget.theme),
+                            );
+                          }
+                          return const SizedBox.shrink();
+                        },
+                      ),
+                    // Interactive controls overlay — fades in/out based on
+                    // user activity. Error/loading states are handled above.
                     if (_config.showControls)
                       AnimatedBuilder(
                         animation: _controller,
@@ -421,18 +450,14 @@ class _CenterControls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (state.error != null) {
-      return _ErrorOverlay(controller: controller, state: state, theme: theme);
-    }
-    if (state.buffering || state.status == PrysmPlaybackStatus.opening) {
-      return _LoadingOverlay(theme: theme);
-    }
+    // Error and loading overlays are rendered in a separate always-visible
+    // layer in PrysmVideoPlayer.build — no need to handle them here.
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
         _IconButton(
           icon: Icons.replay_10_rounded,
-          tooltip: 'Replay 10 seconds',
+          tooltip: '${theme.labels.seekBackward} ${config.seekStep.inSeconds}s',
           theme: theme,
           size: compact ? 46 : 56,
           onTap: () {
@@ -455,7 +480,7 @@ class _CenterControls extends StatelessWidget {
         SizedBox(width: compact ? 18 : 28),
         _IconButton(
           icon: Icons.forward_10_rounded,
-          tooltip: 'Forward 10 seconds',
+          tooltip: '${theme.labels.seekForward} ${config.seekStep.inSeconds}s',
           theme: theme,
           size: compact ? 46 : 56,
           onTap: () {
@@ -521,10 +546,8 @@ class _BottomBar extends StatelessWidget {
               style: TextStyle(color: theme.secondaryColor, fontSize: 12),
             ),
             const Spacer(),
-            if (!compact) ...<Widget>[
-              _SettingsMenu(controller: controller, state: state, theme: theme),
-              const SizedBox(width: 8),
-            ],
+            _SettingsMenu(controller: controller, state: state, theme: theme),
+            const SizedBox(width: 8),
             _IconButton(
               icon: state.muted
                   ? Icons.volume_off_rounded

@@ -52,4 +52,36 @@ class PrysmPerformanceMetrics {
       rebufferDuration: rebufferDuration ?? this.rebufferDuration,
     );
   }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    if (other is! PrysmPerformanceMetrics) return false;
+    return other.timeToFirstFrame == timeToFirstFrame &&
+        other.startupLatency == startupLatency &&
+        other.seekLatency == seekLatency &&
+        other.droppedFrames == droppedFrames &&
+        other.bufferedDuration == bufferedDuration &&
+        other.averageBitrate == averageBitrate &&
+        other.playerMemoryEstimate == playerMemoryEstimate &&
+        other.renderedFrames == renderedFrames &&
+        other.playbackStalls == playbackStalls &&
+        other.rebufferCount == rebufferCount &&
+        other.rebufferDuration == rebufferDuration;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+      timeToFirstFrame,
+      startupLatency,
+      seekLatency,
+      droppedFrames,
+      bufferedDuration,
+      averageBitrate,
+      playerMemoryEstimate,
+      renderedFrames,
+      playbackStalls,
+      rebufferCount,
+      rebufferDuration,
+  );
 }

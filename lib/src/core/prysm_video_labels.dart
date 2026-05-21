@@ -22,6 +22,8 @@ class PrysmVideoLabels {
     this.previousEpisode = 'Previous episode',
     this.networkWeak = 'Network is unstable',
     this.buffering = 'Buffering',
+    this.seekBackward = 'Replay',
+    this.seekForward = 'Skip forward',
   });
 
   const PrysmVideoLabels.fr({
@@ -46,6 +48,8 @@ class PrysmVideoLabels {
     this.previousEpisode = 'Episode precedent',
     this.networkWeak = 'Connexion instable',
     this.buffering = 'Chargement',
+    this.seekBackward = 'Reculer',
+    this.seekForward = 'Avancer',
   });
 
   final String play;
@@ -69,4 +73,6 @@ class PrysmVideoLabels {
   final String previousEpisode;
   final String networkWeak;
   final String buffering;
+  final String seekBackward;
+  final String seekForward;
 }
