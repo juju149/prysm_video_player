@@ -20,11 +20,11 @@ class _PrysmExampleAppState extends State<PrysmExampleApp> {
     super.initState();
     controller = PrysmVideoController(
       source: PrysmVideoSource.network(
-        url: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
-        title: 'Prysm HLS demo',
-        subtitle: 'media_kit backend',
+        url: 'https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8',
+        title: 'Tears of Steel (Unified Streaming)',
+        subtitle: 'HLS stream',
       ),
-      config: const PrysmVideoConfig(autoPlay: false, aspectRatio: 16 / 9),
+      config: const PrysmVideoConfig(autoPlay: true, aspectRatio: 16 / 9),
     );
     controller.events.listen((event) {
       debugPrint('Prysm event: ${event.type.name}');
