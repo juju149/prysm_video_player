@@ -20,6 +20,7 @@ export 'src/playback/prysm_playback_backend.dart';
 export 'src/subtitles/prysm_subtitles.dart';
 export 'src/theme/prysm_ds.dart';
 export 'src/theme/prysm_video_theme.dart';
+export 'src/thumbnails/prysm_thumbnail_provider.dart';
 export 'src/tracks/prysm_tracks.dart';
 export 'src/tv/prysm_tv_controls.dart';
 export 'src/web/prysm_web_policy.dart';

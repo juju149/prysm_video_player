@@ -10,6 +10,8 @@ import '../core/prysm_video_state.dart';
 import '../fullscreen/prysm_fullscreen.dart';
 import '../theme/prysm_ds.dart';
 import '../theme/prysm_video_theme.dart';
+import '../thumbnails/prysm_seek_preview.dart';
+import '../thumbnails/prysm_thumbnail_provider.dart';
 import '../tracks/prysm_tracks.dart';
 import 'prysm_video_surface.dart';
 
@@ -32,6 +34,7 @@ class PrysmVideoPlayer extends StatefulWidget {
     this.controls,
     this.onEvent,
     this.config,
+    this.thumbnails,
   });
 
   final PrysmVideoController controller;
@@ -39,6 +42,13 @@ class PrysmVideoPlayer extends StatefulWidget {
   final PrysmVideoControlsBuilder? controls;
   final ValueChanged<PrysmVideoEvent>? onEvent;
   final PrysmVideoConfig? config;
+
+  /// Optional seek-preview thumbnail configuration.
+  ///
+  /// When non-null, a thumbnail bubble appears above the progress bar while
+  /// the user hovers (desktop), drags (mobile/desktop), or navigates (TV).
+  /// See [PrysmThumbnailConfig] and its providers for setup details.
+  final PrysmThumbnailConfig? thumbnails;
 
   @override
   State<PrysmVideoPlayer> createState() => _PrysmVideoPlayerState();
@@ -265,6 +275,7 @@ class _PrysmVideoPlayerState extends State<PrysmVideoPlayer> {
                                 onFullscreen: _config.enableFullscreen
                                     ? _enterFullscreen
                                     : null,
+                                thumbnailConfig: widget.thumbnails,
                               ),
                       ),
                   ],
@@ -329,6 +340,7 @@ class _PremiumControls extends StatelessWidget {
     required this.seekDir,
     required this.onInteraction,
     required this.onFullscreen,
+    this.thumbnailConfig,
   });
 
   final PrysmVideoController controller;
@@ -338,6 +350,7 @@ class _PremiumControls extends StatelessWidget {
   final ValueNotifier<_SeekDir?> seekDir;
   final VoidCallback onInteraction;
   final Future<void> Function()? onFullscreen;
+  final PrysmThumbnailConfig? thumbnailConfig;
 
   @override
   Widget build(BuildContext context) {
@@ -356,6 +369,7 @@ class _PremiumControls extends StatelessWidget {
               seekDir: seekDir,
               onInteraction: onInteraction,
               onFullscreen: onFullscreen,
+              thumbnailConfig: thumbnailConfig,
             ),
           PrysmPlayerPlatform.mobile => _MobileControls(
               controller: controller,
@@ -365,6 +379,7 @@ class _PremiumControls extends StatelessWidget {
               seekDir: seekDir,
               onInteraction: onInteraction,
               onFullscreen: onFullscreen,
+              thumbnailConfig: thumbnailConfig,
             ),
           PrysmPlayerPlatform.desktop => _DesktopControls(
               controller: controller,
@@ -374,6 +389,7 @@ class _PremiumControls extends StatelessWidget {
               seekDir: seekDir,
               onInteraction: onInteraction,
               onFullscreen: onFullscreen,
+              thumbnailConfig: thumbnailConfig,
             ),
         };
 
@@ -396,6 +412,7 @@ abstract class _ControlsLayout extends StatelessWidget {
     required this.seekDir,
     required this.onInteraction,
     required this.onFullscreen,
+    this.thumbnailConfig,
   });
 
   final PrysmVideoController controller;
@@ -405,6 +422,7 @@ abstract class _ControlsLayout extends StatelessWidget {
   final ValueNotifier<_SeekDir?> seekDir;
   final VoidCallback onInteraction;
   final Future<void> Function()? onFullscreen;
+  final PrysmThumbnailConfig? thumbnailConfig;
 
   Widget buildScrim() => DecoratedBox(
         decoration: BoxDecoration(
@@ -432,6 +450,7 @@ class _MobileControls extends _ControlsLayout {
     required super.seekDir,
     required super.onInteraction,
     required super.onFullscreen,
+    super.thumbnailConfig,
   });
 
   @override
@@ -489,6 +508,7 @@ class _MobileControls extends _ControlsLayout {
                       theme: theme,
                       onInteraction: onInteraction,
                       onFullscreen: onFullscreen,
+                      thumbnailConfig: thumbnailConfig,
                       timeStyle: const TextStyle(
                         color: Color(0xCCFFFFFF),
                         fontSize: PrysmDS.textSm,
@@ -520,6 +540,7 @@ class _DesktopControls extends _ControlsLayout {
     required super.seekDir,
     required super.onInteraction,
     required super.onFullscreen,
+    super.thumbnailConfig,
   });
 
   @override
@@ -570,6 +591,7 @@ class _DesktopControls extends _ControlsLayout {
                       theme: theme,
                       onInteraction: onInteraction,
                       onFullscreen: onFullscreen,
+                      thumbnailConfig: thumbnailConfig,
                       timeStyle: const TextStyle(
                         color: Color(0xCCFFFFFF),
                         fontSize: PrysmDS.textMd,
@@ -601,6 +623,7 @@ class _TvControls extends _ControlsLayout {
     required super.seekDir,
     required super.onInteraction,
     required super.onFullscreen,
+    super.thumbnailConfig,
   });
 
   @override
@@ -640,6 +663,8 @@ class _TvControls extends _ControlsLayout {
                       controller: controller,
                       theme: theme,
                       onInteraction: onInteraction,
+                      thumbnailConfig: thumbnailConfig,
+                      isTv: true,
                     ),
                     const SizedBox(height: PrysmDS.sp16),
                     Row(
@@ -839,6 +864,7 @@ class _BottomBar extends StatelessWidget {
     required this.onInteraction,
     required this.onFullscreen,
     required this.timeStyle,
+    this.thumbnailConfig,
   });
 
   final PrysmVideoController controller;
@@ -847,6 +873,7 @@ class _BottomBar extends StatelessWidget {
   final VoidCallback onInteraction;
   final Future<void> Function()? onFullscreen;
   final TextStyle timeStyle;
+  final PrysmThumbnailConfig? thumbnailConfig;
 
   @override
   Widget build(BuildContext context) {
@@ -857,6 +884,7 @@ class _BottomBar extends StatelessWidget {
           controller: controller,
           theme: theme,
           onInteraction: onInteraction,
+          thumbnailConfig: thumbnailConfig,
         ),
         const SizedBox(height: PrysmDS.sp4),
         Row(
@@ -1202,17 +1230,63 @@ class _PlayPauseButtonState extends State<_PlayPauseButton> {
   }
 }
 
-// Premium custom progress bar
+// ─────────────────────────────────────────────────────────────────────────────
+// Progress bar — interactive track + seek-preview overlay
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Internal preview state carried by the ValueNotifier — updated without
+// calling setState so only the preview overlay rebuilds on hover move.
+class _SeekPreviewState {
+  const _SeekPreviewState({
+    this.visible = false,
+    this.progress = 0.0,
+    this.timestamp = Duration.zero,
+    this.result,
+    this.loading = false,
+  });
+
+  final bool visible;
+  final double progress;
+  final Duration timestamp;
+  final PrysmThumbnailResult? result;
+  final bool loading;
+
+  _SeekPreviewState copyWith({
+    bool? visible,
+    double? progress,
+    Duration? timestamp,
+    PrysmThumbnailResult? result,
+    bool clearResult = false,
+    bool? loading,
+  }) {
+    return _SeekPreviewState(
+      visible: visible ?? this.visible,
+      progress: progress ?? this.progress,
+      timestamp: timestamp ?? this.timestamp,
+      result: clearResult ? null : (result ?? this.result),
+      loading: loading ?? this.loading,
+    );
+  }
+}
+
 class _ProgressBar extends StatefulWidget {
   const _ProgressBar({
     required this.controller,
     required this.theme,
     required this.onInteraction,
+    this.thumbnailConfig,
+    this.isTv = false,
   });
 
   final PrysmVideoController controller;
   final PrysmVideoTheme theme;
   final VoidCallback onInteraction;
+
+  /// Optional thumbnail configuration. When null, no preview is shown.
+  final PrysmThumbnailConfig? thumbnailConfig;
+
+  /// When true, uses TV-sized preview bubbles.
+  final bool isTv;
 
   @override
   State<_ProgressBar> createState() => _ProgressBarState();
@@ -1220,12 +1294,26 @@ class _ProgressBar extends StatefulWidget {
 
 class _ProgressBarState extends State<_ProgressBar>
     with SingleTickerProviderStateMixin {
+  // ── Existing track state ──────────────────────────────────────────────────
   bool _hovering = false;
   bool _dragging = false;
   double? _dragProgress;
   late AnimationController _hoverCtrl;
   late Animation<double> _trackH;
   late Animation<double> _thumbOp;
+
+  // ── Preview state ─────────────────────────────────────────────────────────
+  // Updated without setState to avoid unnecessary CustomPaint rebuilds.
+  final ValueNotifier<_SeekPreviewState> _previewNotifier =
+      ValueNotifier(const _SeekPreviewState());
+  final PrysmThumbnailCache _thumbCache = PrysmThumbnailCache();
+  Timer? _thumbTimer;
+  PrysmThumbnailResult? _lastResult;
+  bool _previewActive = false;
+  bool _disposed = false;
+
+  // Stored to detect source changes and invalidate the cache.
+  Object? _lastSourceId;
 
   @override
   void initState() {
@@ -1238,13 +1326,33 @@ class _ProgressBarState extends State<_ProgressBar>
     _thumbOp = Tween<double>(begin: 0, end: 1).animate(
       CurvedAnimation(parent: _hoverCtrl, curve: PrysmDS.curveOut),
     );
+    _lastSourceId = widget.controller.state.source?.uri;
+    widget.controller.addListener(_onControllerChanged);
   }
 
   @override
   void dispose() {
+    _disposed = true;
+    widget.controller.removeListener(_onControllerChanged);
+    _thumbTimer?.cancel();
+    _previewNotifier.dispose();
     _hoverCtrl.dispose();
     super.dispose();
   }
+
+  // ── Source change detection ───────────────────────────────────────────────
+
+  void _onControllerChanged() {
+    final newId = widget.controller.state.source?.uri;
+    if (newId != _lastSourceId) {
+      _lastSourceId = newId;
+      _thumbCache.clear();
+      _lastResult = null;
+      widget.thumbnailConfig?.provider?.dispose();
+    }
+  }
+
+  // ── Track animation helpers ───────────────────────────────────────────────
 
   void _activate() => _hoverCtrl.forward();
 
@@ -1260,39 +1368,155 @@ class _ProgressBarState extends State<_ProgressBar>
     widget.onInteraction();
   }
 
+  // ── Preview management ────────────────────────────────────────────────────
+
+  void _showPreview(double progress) {
+    final cfg = widget.thumbnailConfig;
+    if (cfg == null || _disposed) return;
+
+    final dur = widget.controller.state.duration;
+    final ts = dur > Duration.zero ? dur * progress : Duration.zero;
+
+    _previewActive = true;
+    _previewNotifier.value = _SeekPreviewState(
+      visible: true,
+      progress: progress,
+      timestamp: ts,
+      // Show last cached result while the new one resolves — prevents flicker.
+      result: _lastResult,
+      loading: cfg.provider != null && dur > Duration.zero,
+    );
+
+    _thumbTimer?.cancel();
+    if (cfg.provider != null && dur > Duration.zero) {
+      _thumbTimer = Timer(
+        cfg.throttle,
+        () => _resolveThumb(progress, ts, dur),
+      );
+    }
+  }
+
+  void _hidePreview() {
+    if (!_previewActive || _disposed) return;
+    _previewActive = false;
+    _thumbTimer?.cancel();
+    _previewNotifier.value = _previewNotifier.value.copyWith(visible: false);
+  }
+
+  Future<void> _resolveThumb(
+    double progress,
+    Duration ts,
+    Duration dur,
+  ) async {
+    try {
+      final provider = widget.thumbnailConfig?.provider;
+      if (provider == null || !mounted || _disposed) return;
+
+      // Quantise to 200 ms buckets so adjacent positions share cached results.
+      final cacheKey = (ts.inMilliseconds ~/ 200) * 200;
+      final cached = _thumbCache.get(cacheKey);
+      if (cached != null) {
+        _lastResult = cached;
+        if (!mounted || _disposed) return;
+        if (_previewActive) {
+          _previewNotifier.value = _previewNotifier.value.copyWith(
+            result: cached,
+            loading: false,
+          );
+        }
+        return;
+      }
+
+      final result = await provider.resolve(ts, dur);
+      if (!mounted || _disposed || result == null) return;
+
+      _thumbCache.put(cacheKey, result);
+      _lastResult = result;
+
+      if (_previewActive) {
+        _previewNotifier.value = _previewNotifier.value.copyWith(
+          result: result,
+          loading: false,
+        );
+      }
+    } catch (_) {
+      // Thumbnail resolution failed (network error, invalid URL, etc.).
+      // Silently swallow — the timecode fallback is already displayed.
+    }
+  }
+
+  // ── Layout helpers ────────────────────────────────────────────────────────
+
+  double _calcPreviewLeft(double progress, double barWidth) {
+    final cfg = widget.thumbnailConfig!;
+    final pw = widget.isTv ? cfg.tvPreviewWidth : cfg.previewWidth;
+    if (!cfg.hasImages) {
+      // Timecode-only: use a fixed narrow width estimate (~64px).
+      const narrowW = 64.0;
+      return (barWidth * progress - narrowW / 2).clamp(
+        0.0,
+        (barWidth - narrowW).clamp(0.0, double.infinity),
+      );
+    }
+    return (barWidth * progress - pw / 2).clamp(
+      0.0,
+      (barWidth - pw).clamp(0.0, double.infinity),
+    );
+  }
+
+  // ── Build ─────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) {
-        setState(() => _hovering = true);
-        _activate();
-      },
-      onExit: (_) {
-        setState(() => _hovering = false);
-        _deactivate();
-      },
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final width = constraints.maxWidth;
-          return GestureDetector(
+    final hasThumbnails = widget.thumbnailConfig != null;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+
+        // ── Interactive track ─────────────────────────────────────────────
+        final track = MouseRegion(
+          cursor: SystemMouseCursors.click,
+          onEnter: (_) {
+            setState(() => _hovering = true);
+            _activate();
+          },
+          onHover: hasThumbnails
+              ? (event) {
+                  final p =
+                      (event.localPosition.dx / width).clamp(0.0, 1.0);
+                  _showPreview(p);
+                }
+              : null,
+          onExit: (_) {
+            setState(() => _hovering = false);
+            _deactivate();
+            if (!_dragging) _hidePreview();
+          },
+          child: GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTapUp: (d) =>
-                _commitSeek((d.localPosition.dx / width).clamp(0.0, 1.0)),
+            onTapUp: (d) {
+              final p = (d.localPosition.dx / width).clamp(0.0, 1.0);
+              _commitSeek(p);
+              if (!_hovering) _hidePreview();
+            },
             onHorizontalDragStart: (d) {
+              final p = (d.localPosition.dx / width).clamp(0.0, 1.0);
               setState(() {
                 _dragging = true;
-                _dragProgress =
-                    (d.localPosition.dx / width).clamp(0.0, 1.0);
+                _dragProgress = p;
               });
               _activate();
+              if (hasThumbnails) {
+                _showPreview(p);
+                HapticFeedback.selectionClick();
+              }
               widget.onInteraction();
             },
             onHorizontalDragUpdate: (d) {
-              setState(() {
-                _dragProgress =
-                    (d.localPosition.dx / width).clamp(0.0, 1.0);
-              });
+              final p = (d.localPosition.dx / width).clamp(0.0, 1.0);
+              setState(() => _dragProgress = p);
+              if (hasThumbnails) _showPreview(p);
             },
             onHorizontalDragEnd: (_) {
               if (_dragProgress != null) _commitSeek(_dragProgress!);
@@ -1301,6 +1525,7 @@ class _ProgressBarState extends State<_ProgressBar>
                 _dragProgress = null;
               });
               _deactivate();
+              if (!_hovering) _hidePreview();
             },
             child: SizedBox(
               height: 28,
@@ -1329,9 +1554,63 @@ class _ProgressBarState extends State<_ProgressBar>
                 },
               ),
             ),
-          );
-        },
-      ),
+          ),
+        );
+
+        if (!hasThumbnails) return track;
+
+        // ── Preview overlay ───────────────────────────────────────────────
+        // Stack with Clip.none lets the bubble float above the 28 px hit area
+        // without being clipped by the progress-bar's own paint bounds.
+        // Since the controls layout already fills the full player height, the
+        // bubble stays within the player's visual bounds.
+        return Stack(
+          clipBehavior: Clip.none,
+          children: <Widget>[
+            track,
+            ValueListenableBuilder<_SeekPreviewState>(
+              valueListenable: _previewNotifier,
+              builder: (context, state, _) {
+                final left = _calcPreviewLeft(state.progress, width);
+                return Positioned(
+                  // Position the bubble bottom edge ~36 px above the track
+                  // area bottom, giving a comfortable gap above the thumb.
+                  bottom: 36,
+                  left: left,
+                  child: IgnorePointer(
+                    child: AnimatedScale(
+                      scale: state.visible ? 1.0 : 0.88,
+                      duration:
+                          state.visible ? PrysmDS.fast : PrysmDS.standard,
+                      curve: PrysmDS.curveOut,
+                      alignment: Alignment.bottomCenter,
+                      child: AnimatedOpacity(
+                        opacity: state.visible ? 1.0 : 0.0,
+                        duration: state.visible
+                            ? PrysmDS.fast
+                            : PrysmDS.standard,
+                        curve: PrysmDS.curveOut,
+                        child: PrysmSeekPreview(
+                          data: SeekPreviewData(
+                            visible: state.visible,
+                            progress: state.progress,
+                            timestamp: state.timestamp,
+                            result: state.result,
+                            loading: state.loading,
+                          ),
+                          config: widget.thumbnailConfig!,
+                          theme: widget.theme,
+                          isTv: widget.isTv,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ],
+        );
+      },
     );
   }
 }
