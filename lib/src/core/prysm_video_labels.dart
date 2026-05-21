@@ -14,6 +14,8 @@ class PrysmVideoLabels {
     this.subtitles = 'Subtitles',
     this.audio = 'Audio',
     this.speed = 'Speed',
+    this.mute = 'Mute',
+    this.unmute = 'Unmute',
     this.off = 'Off',
     this.auto = 'Auto',
     this.live = 'Live',
@@ -40,6 +42,8 @@ class PrysmVideoLabels {
     this.subtitles = 'Sous-titres',
     this.audio = 'Audio',
     this.speed = 'Vitesse',
+    this.mute = 'Couper le son',
+    this.unmute = 'Reactiver le son',
     this.off = 'Desactive',
     this.auto = 'Auto',
     this.live = 'Direct',
@@ -65,6 +69,8 @@ class PrysmVideoLabels {
   final String subtitles;
   final String audio;
   final String speed;
+  final String mute;
+  final String unmute;
   final String off;
   final String auto;
   final String live;

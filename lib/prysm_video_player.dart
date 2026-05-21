@@ -18,6 +18,7 @@ export 'src/pip/prysm_picture_in_picture.dart';
 export 'src/playback/media_kit_playback_backend.dart';
 export 'src/playback/prysm_playback_backend.dart';
 export 'src/subtitles/prysm_subtitles.dart';
+export 'src/theme/prysm_ds.dart';
 export 'src/theme/prysm_video_theme.dart';
 export 'src/tracks/prysm_tracks.dart';
 export 'src/tv/prysm_tv_controls.dart';
