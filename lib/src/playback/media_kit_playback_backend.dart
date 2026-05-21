@@ -59,14 +59,12 @@ class MediaKitPlaybackBackend implements PrysmPlaybackBackend {
   Stream<Object> get errors => player.stream.error;
 
   @override
-  Stream<PrysmAvailableTracks> get availableTracks {
-    return player.stream.tracks.map(_mapAvailableTracks);
-  }
+  late final Stream<PrysmAvailableTracks> availableTracks =
+      player.stream.tracks.map(_mapAvailableTracks);
 
   @override
-  Stream<PrysmSelectedTracks> get selectedTracks {
-    return player.stream.track.map(_mapSelectedTracks);
-  }
+  late final Stream<PrysmSelectedTracks> selectedTracks =
+      player.stream.track.map(_mapSelectedTracks);
 
   @override
   PrysmAvailableTracks get currentAvailableTracks {

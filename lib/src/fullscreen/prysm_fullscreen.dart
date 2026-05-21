@@ -65,15 +65,13 @@ class _FullscreenShellState extends State<_FullscreenShell> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      body: SafeArea(
-        child: PrysmVideoPlayer(
-          controller: widget.controller,
-          config: widget.config.copyWith(
-            aspectRatio: null,
-            enableFullscreen: false,
-          ),
-          theme: widget.theme,
+      body: PrysmVideoPlayer(
+        controller: widget.controller,
+        config: widget.config.copyWith(
+          aspectRatio: null,
+          enableFullscreen: false,
         ),
+        theme: widget.theme,
       ),
     );
   }

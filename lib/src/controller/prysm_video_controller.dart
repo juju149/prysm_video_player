@@ -138,8 +138,10 @@ class PrysmVideoController extends ChangeNotifier {
           if (now.difference(_lastPositionUpdate) < config.positionThrottle) {
             return;
           }
+          final clamped = _clampPosition(value);
+          if (clamped == _state.position) return;
           _lastPositionUpdate = now;
-          _update(_state.copyWith(position: _clampPosition(value)));
+          _update(_state.copyWith(position: clamped));
           if (_startupWatch.isRunning && value > Duration.zero) {
             _startupWatch.stop();
             _update(
@@ -160,25 +162,31 @@ class PrysmVideoController extends ChangeNotifier {
       )
       ..add(
         _backend.buffer.listen((value) {
+          if (value == _state.bufferedPosition) return;
+          final buffered = value > _state.position
+              ? value - _state.position
+              : Duration.zero;
           _update(
             _state.copyWith(
               bufferedPosition: value,
-              metrics: _state.metrics.copyWith(
-                bufferedDuration: value - _state.position,
-              ),
+              metrics: _state.metrics.copyWith(bufferedDuration: buffered),
             ),
           );
         }),
       )
       ..add(
         _backend.volume.listen((value) {
+          if (value == _state.volume) return;
           if (value > 0) _lastAudibleVolume = value;
           _update(_state.copyWith(volume: value, muted: value <= 0));
         }),
       )
       ..add(
         _backend.speed.listen(
-          (value) => _update(_state.copyWith(speed: value)),
+          (value) {
+            if (value == _state.speed) return;
+            _update(_state.copyWith(speed: value));
+          },
         ),
       )
       ..add(

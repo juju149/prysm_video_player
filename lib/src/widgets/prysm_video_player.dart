@@ -53,7 +53,9 @@ class _PrysmVideoPlayerState extends State<PrysmVideoPlayer> {
   void initState() {
     super.initState();
     _config = widget.config ?? widget.controller.config;
-    _eventSubscription = widget.controller.events.listen(widget.onEvent);
+    _eventSubscription = widget.controller.events.listen(
+      (e) => widget.onEvent?.call(e),
+    );
     if (widget.controller.source != null &&
         widget.controller.state.status == PrysmPlaybackStatus.idle) {
       unawaited(widget.controller.open(widget.controller.source!));
@@ -66,7 +68,9 @@ class _PrysmVideoPlayerState extends State<PrysmVideoPlayer> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller != widget.controller) {
       _eventSubscription.cancel();
-      _eventSubscription = widget.controller.events.listen(widget.onEvent);
+      _eventSubscription = widget.controller.events.listen(
+        (e) => widget.onEvent?.call(e),
+      );
     }
     _config = widget.config ?? widget.controller.config;
   }
