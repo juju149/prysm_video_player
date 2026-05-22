@@ -75,6 +75,7 @@ quality, subtitles, DRM metadata, and protected source signaling.
 The stable customization slots are:
 
 - whole-controls replacement through `PrysmVideoControlsBuilder`
+- render-surface replacement through `PrysmVideoSurfaceBuilder`
 - fine-grained UI replacement through `PrysmVideoCustomization`
 - headless rendering through `PrysmVideoSurface`
 - theme replacement through `PrysmVideoTheme`
@@ -95,9 +96,8 @@ overlay, progress bar, settings menu, speed picker, quality picker, subtitle
 picker, audio picker, subtitle renderer, top bar, bottom bar, gesture wrapper,
 keyboard shortcut handler, and TV focus builder.
 
-Future granular slots such as top bar, bottom bar, progress bar, settings menu,
-loading overlay, and error overlay should be additive. Existing users must be
-able to keep replacing the entire controls layer.
+Future granular slots should be additive. Existing users must be able to keep
+replacing the entire controls layer, the render surface, or one focused region.
 
 ## Event And Error Contract
 

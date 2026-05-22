@@ -33,6 +33,21 @@ PrysmVideoPlayer(
 PrysmVideoSurface(controller: controller);
 ```
 
+## Custom Surface
+
+`surfaceBuilder` replaces only the render surface while keeping the player
+shell, controls, fullscreen route, gestures, overlays, and customization slots.
+It is useful for tests, alternate renderers, platform experiments, and previews.
+
+```dart
+PrysmVideoPlayer(
+  controller: controller,
+  surfaceBuilder: (context, controller, state) {
+    return MyVideoSurface(state: state);
+  },
+);
+```
+
 ## Custom Controls
 
 ```dart
@@ -70,6 +85,10 @@ Available slots:
 Builders that wrap existing UI receive the default widget as `details.child`.
 Handlers receive `PrysmPlayerBuildContext`, which includes controller, state,
 config, theme, platform, visibility, fullscreen callback, and thumbnails.
+
+The default implementation keeps these slots backed by the same internal player
+UI, so apps can replace one region at a time without forking the full controls
+layer.
 
 ## Controller Commands
 

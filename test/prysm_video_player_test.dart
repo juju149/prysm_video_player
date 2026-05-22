@@ -1,6 +1,7 @@
 import 'dart:async';
 
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:prysm_video_player/prysm_video_player.dart';
@@ -167,6 +168,348 @@ Hello
       expect(find.text('default'), findsOneWidget);
       controller.dispose();
     });
+
+    testWidgets('track picker customization receives values and selection', (
+      tester,
+    ) async {
+      final controller = PrysmVideoController(backend: _FakeBackend());
+      final details = _buildCustomizationContext(controller);
+      final pickerDetails = PrysmTrackPickerDetails<double>(
+        context: details,
+        kind: PrysmTrackPickerKind.speed,
+        title: 'Speed',
+        values: const <double>[1, 1.5, 2],
+        selected: 1.5,
+        label: (value) => '${value}x',
+        onSelected: (_) async {},
+        child: const Text('default-picker'),
+      );
+
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: Builder(
+            builder: (context) {
+              return PrysmVideoCustomization(
+                speedPickerBuilder: (context, details) {
+                  return Column(
+                    children: <Widget>[
+                      Text(details.title),
+                      Text(details.label(details.selected)),
+                      Text('${details.values.length} values'),
+                      details.child,
+                    ],
+                  );
+                },
+              ).speedPickerBuilder!(context, pickerDetails);
+            },
+          ),
+        ),
+      );
+
+      expect(find.text('Speed'), findsOneWidget);
+      expect(find.text('1.5x'), findsOneWidget);
+      expect(find.text('3 values'), findsOneWidget);
+      expect(find.text('default-picker'), findsOneWidget);
+      controller.dispose();
+    });
+
+    testWidgets('keyboard customization can override default handling', (
+      tester,
+    ) async {
+      final controller = PrysmVideoController(backend: _FakeBackend());
+      final details = _buildCustomizationContext(controller);
+      final customization = PrysmVideoCustomization(
+        keyboardShortcutHandler: (context, details) {
+          expect(details.defaultResult, KeyEventResult.ignored);
+          return KeyEventResult.handled;
+        },
+      );
+      late final KeyEventResult result;
+
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: Builder(
+            builder: (context) {
+              result = customization.keyboardShortcutHandler!(
+                context,
+                PrysmKeyboardShortcutDetails(
+                  context: details,
+                  event: const KeyDownEvent(
+                    physicalKey: PhysicalKeyboardKey.keyL,
+                    logicalKey: LogicalKeyboardKey.keyL,
+                    timeStamp: Duration.zero,
+                  ),
+                  defaultResult: KeyEventResult.ignored,
+                ),
+              );
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      );
+
+      expect(result, KeyEventResult.handled);
+      controller.dispose();
+    });
+
+    testWidgets('loading and error builders can wrap default widgets', (
+      tester,
+    ) async {
+      final controller = PrysmVideoController(backend: _FakeBackend());
+      final details = _buildCustomizationContext(controller);
+      var retried = false;
+      final customization = PrysmVideoCustomization(
+        loadingBuilder: (context, details) {
+          return Column(
+            children: <Widget>[const Text('loading-wrapper'), details.child],
+          );
+        },
+        errorBuilder: (context, details) {
+          return TextButton(
+            onPressed: details.retry,
+            child: Text(details.error?.developerMessage ?? 'error-wrapper'),
+          );
+        },
+      );
+
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: Builder(
+            builder: (context) {
+              return Column(
+                children: <Widget>[
+                  customization.loadingBuilder!(
+                    context,
+                    PrysmLoadingDetails(
+                      context: details,
+                      child: const Text('default-loading'),
+                    ),
+                  ),
+                  customization.errorBuilder!(
+                    context,
+                    PrysmErrorDetails(
+                      context: details,
+                      error: PrysmUnknownVideoError(
+                        'Broken',
+                        Exception('Broken'),
+                      ),
+                      retry: () => retried = true,
+                      child: const Text('default-error'),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      );
+
+      expect(find.text('loading-wrapper'), findsOneWidget);
+      expect(find.text('default-loading'), findsOneWidget);
+      await tester.tap(find.text('Broken'));
+      expect(retried, isTrue);
+      controller.dispose();
+    });
+  });
+
+  group('PrysmVideoPlayer widgets', () {
+    testWidgets('renders custom loading builder from player state', (
+      tester,
+    ) async {
+      final backend = _FakeBackend(openCompleter: Completer<void>());
+      final controller = PrysmVideoController(backend: backend);
+      await _pumpTestPlayer(
+        tester,
+        controller: controller,
+        customization: PrysmVideoCustomization(
+          loadingBuilder: (context, details) {
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[const Text('custom-loading'), details.child],
+            );
+          },
+        ),
+      );
+
+      unawaited(
+        controller.open(PrysmVideoSource.network(url: 'https://cdn/video.mp4')),
+      );
+      await tester.pump();
+
+      expect(find.text('custom-loading'), findsOneWidget);
+      controller.dispose();
+    });
+
+    testWidgets('renders custom error builder and retries source', (
+      tester,
+    ) async {
+      final backend = _FakeBackend(openErrorsRemaining: 1);
+      final controller = PrysmVideoController(backend: backend);
+      var retryInvoked = false;
+      await _pumpTestPlayer(
+        tester,
+        controller: controller,
+        customization: PrysmVideoCustomization(
+          errorBuilder: (context, details) {
+            return TextButton(
+              onPressed: details.retry == null
+                  ? null
+                  : () {
+                      retryInvoked = true;
+                      details.retry!();
+                    },
+              child: Text('custom-error:${details.error?.kind.name}'),
+            );
+          },
+        ),
+      );
+
+      await expectLater(
+        controller.open(PrysmVideoSource.network(url: 'https://cdn/video.mp4')),
+        throwsA(isA<PrysmVideoError>()),
+      );
+      await tester.pump();
+
+      expect(find.text('custom-error:unknown'), findsOneWidget);
+      await tester.tap(find.widgetWithText(TextButton, 'custom-error:unknown'));
+      await tester.pumpAndSettle();
+
+      expect(retryInvoked, isTrue);
+      expect(backend.openCalls, 2);
+      controller.dispose();
+    });
+
+    testWidgets('renders custom progress builder inside default controls', (
+      tester,
+    ) async {
+      final controller = PrysmVideoController(backend: _FakeBackend());
+      await _pumpTestPlayer(
+        tester,
+        controller: controller,
+        customization: PrysmVideoCustomization(
+          progressBarBuilder: (context, details) {
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[const Text('custom-progress'), details.child],
+            );
+          },
+        ),
+      );
+
+      expect(find.text('custom-progress'), findsOneWidget);
+      controller.dispose();
+    });
+
+    testWidgets('renders custom settings menu and speed picker', (
+      tester,
+    ) async {
+      final controller = PrysmVideoController(backend: _FakeBackend());
+      await _pumpTestPlayer(
+        tester,
+        controller: controller,
+        customization: PrysmVideoCustomization(
+          settingsMenuBuilder: (context, details) {
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[const Text('custom-settings'), details.child],
+            );
+          },
+          speedPickerBuilder: (context, details) {
+            return Center(child: Text('custom-${details.kind.name}-picker'));
+          },
+        ),
+      );
+
+      expect(find.byIcon(Icons.tune_rounded), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.tune_rounded), warnIfMissed: false);
+      await tester.pumpAndSettle();
+
+      expect(find.text('custom-settings'), findsOneWidget);
+
+      await tester.tap(find.text('Speed'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('custom-speed-picker'), findsOneWidget);
+      controller.dispose();
+    });
+
+    testWidgets('routes keyboard events through custom handler', (
+      tester,
+    ) async {
+      var handled = false;
+      final controller = PrysmVideoController(backend: _FakeBackend());
+      await _pumpTestPlayer(
+        tester,
+        controller: controller,
+        customization: PrysmVideoCustomization(
+          keyboardShortcutHandler: (context, details) {
+            if (details.event.logicalKey == LogicalKeyboardKey.keyL) {
+              handled = true;
+              return KeyEventResult.handled;
+            }
+            return details.defaultResult;
+          },
+        ),
+      );
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.keyL);
+      await tester.pump();
+
+      expect(handled, isTrue);
+      controller.dispose();
+    });
+
+    testWidgets('wraps player content with custom gesture builder', (
+      tester,
+    ) async {
+      var longPressed = false;
+      final controller = PrysmVideoController(backend: _FakeBackend());
+      await _pumpTestPlayer(
+        tester,
+        controller: controller,
+        customization: PrysmVideoCustomization(
+          gestureBuilder: (context, details) {
+            return GestureDetector(
+              onLongPress: () => longPressed = true,
+              child: details.child,
+            );
+          },
+        ),
+      );
+
+      await tester.longPress(
+        find.byKey(const ValueKey<String>('fake-surface')),
+        warnIfMissed: false,
+      );
+      await tester.pump();
+
+      expect(longPressed, isTrue);
+      controller.dispose();
+    });
+
+    testWidgets('wraps TV focus region with custom builder', (tester) async {
+      final controller = PrysmVideoController(backend: _FakeBackend());
+      await _pumpTestPlayer(
+        tester,
+        controller: controller,
+        size: const Size(1200, 680),
+        theme: const PrysmVideoTheme.tv(),
+        customization: PrysmVideoCustomization(
+          tvFocusBuilder: (context, details) {
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[const Text('custom-tv-focus'), details.child],
+            );
+          },
+        ),
+      );
+
+      expect(find.text('custom-tv-focus'), findsOneWidget);
+      controller.dispose();
+    });
   });
 
   group('Controller safety', () {
@@ -283,9 +626,68 @@ Hello
   });
 }
 
+Future<void> _pumpTestPlayer(
+  WidgetTester tester, {
+  required PrysmVideoController controller,
+  PrysmVideoTheme theme = const PrysmVideoTheme.dark(),
+  PrysmVideoCustomization customization = const PrysmVideoCustomization(),
+  Size size = const Size(760, 428),
+}) {
+  return tester.pumpWidget(
+    MaterialApp(
+      home: Scaffold(
+        body: Center(
+          child: OverflowBox(
+            maxWidth: size.width,
+            maxHeight: size.height,
+            child: SizedBox(
+              width: size.width,
+              height: size.height,
+              child: PrysmVideoPlayer(
+                controller: controller,
+                theme: theme,
+                customization: customization,
+                surfaceBuilder: (context, controller, state) {
+                  return const ColoredBox(
+                    key: ValueKey<String>('fake-surface'),
+                    color: Colors.black,
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+PrysmPlayerBuildContext _buildCustomizationContext(
+  PrysmVideoController controller,
+) {
+  return PrysmPlayerBuildContext(
+    controller: controller,
+    state: controller.state,
+    config: const PrysmVideoConfig(),
+    theme: const PrysmVideoTheme.dark(),
+    platform: PrysmPlayerPlatform.desktop,
+    visible: true,
+    onInteraction: () {},
+    onFullscreen: null,
+    thumbnails: null,
+  );
+}
+
 class _FakeBackend implements PrysmPlaybackBackend {
+  _FakeBackend({this.openCompleter, this.openErrorsRemaining = 0});
+
+  final Completer<void>? openCompleter;
+  int openErrorsRemaining;
   PrysmVideoSource? openedSource;
+  int openCalls = 0;
   int playCalls = 0;
+  int pauseCalls = 0;
+  int seekCalls = 0;
 
   @override
   VideoController get videoController => throw UnimplementedError();
@@ -343,11 +745,19 @@ class _FakeBackend implements PrysmPlaybackBackend {
     PrysmVideoQuality? quality,
     bool play = true,
   }) async {
+    openCalls++;
+    if (openErrorsRemaining > 0) {
+      openErrorsRemaining--;
+      throw Exception('Broken open');
+    }
     openedSource = source;
+    await openCompleter?.future;
   }
 
   @override
-  Future<void> pause() async {}
+  Future<void> pause() async {
+    pauseCalls++;
+  }
 
   @override
   Future<void> play() async {
@@ -358,7 +768,9 @@ class _FakeBackend implements PrysmPlaybackBackend {
   Future<void> playOrPause() async {}
 
   @override
-  Future<void> seek(Duration position) async {}
+  Future<void> seek(Duration position) async {
+    seekCalls++;
+  }
 
   @override
   Future<void> selectAudioTrack(String id) async {}
