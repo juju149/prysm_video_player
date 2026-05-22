@@ -2,6 +2,8 @@ library;
 
 export 'src/audio/prysm_audio.dart';
 export 'src/cache/prysm_cache_config.dart';
+export 'src/cache/prysm_video_cache.dart';
+export 'src/casting/prysm_cast.dart';
 export 'src/controller/prysm_video_controller.dart';
 export 'src/core/prysm_video_config.dart';
 export 'src/core/prysm_video_event.dart';
@@ -13,6 +15,7 @@ export 'src/drm/prysm_drm_config.dart';
 export 'src/errors/prysm_video_error.dart';
 export 'src/fullscreen/prysm_fullscreen.dart';
 export 'src/gestures/prysm_gestures.dart';
+export 'src/media/prysm_media_integration.dart';
 export 'src/performance/prysm_performance_metrics.dart';
 export 'src/pip/prysm_picture_in_picture.dart';
 export 'src/playback/media_kit_playback_backend.dart';

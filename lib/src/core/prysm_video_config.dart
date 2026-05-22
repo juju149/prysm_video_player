@@ -28,6 +28,8 @@ class PrysmVideoConfig {
     this.enableTvControls = true,
     this.enableFullscreen = true,
     this.enablePictureInPicture = false,
+    this.enableBackgroundAudio = false,
+    this.enableMediaNotifications = false,
     this.pauseWhenBackgrounded = true,
     this.resumeWhenForegrounded = false,
     this.cache = const PrysmCacheConfig.disabled(),
@@ -55,6 +57,8 @@ class PrysmVideoConfig {
   final bool enableTvControls;
   final bool enableFullscreen;
   final bool enablePictureInPicture;
+  final bool enableBackgroundAudio;
+  final bool enableMediaNotifications;
   final bool pauseWhenBackgrounded;
   final bool resumeWhenForegrounded;
   final PrysmCacheConfig cache;
@@ -82,6 +86,8 @@ class PrysmVideoConfig {
     bool? enableTvControls,
     bool? enableFullscreen,
     bool? enablePictureInPicture,
+    bool? enableBackgroundAudio,
+    bool? enableMediaNotifications,
     bool? pauseWhenBackgrounded,
     bool? resumeWhenForegrounded,
     PrysmCacheConfig? cache,
@@ -112,6 +118,10 @@ class PrysmVideoConfig {
       enableFullscreen: enableFullscreen ?? this.enableFullscreen,
       enablePictureInPicture:
           enablePictureInPicture ?? this.enablePictureInPicture,
+      enableBackgroundAudio:
+          enableBackgroundAudio ?? this.enableBackgroundAudio,
+      enableMediaNotifications:
+          enableMediaNotifications ?? this.enableMediaNotifications,
       pauseWhenBackgrounded:
           pauseWhenBackgrounded ?? this.pauseWhenBackgrounded,
       resumeWhenForegrounded:

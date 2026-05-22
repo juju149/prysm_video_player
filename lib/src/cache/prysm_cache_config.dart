@@ -6,6 +6,7 @@ class PrysmCacheConfig {
     this.maxBytes = 512 * 1024 * 1024,
     this.maxAge = const Duration(days: 7),
     this.preloadDuration = const Duration(seconds: 15),
+    this.firstChunkBytes = 8 * 1024 * 1024,
     this.cacheProtectedSources = false,
     this.cacheThumbnails = true,
   });
@@ -15,6 +16,7 @@ class PrysmCacheConfig {
       maxBytes = 0,
       maxAge = Duration.zero,
       preloadDuration = Duration.zero,
+      firstChunkBytes = 0,
       cacheProtectedSources = false,
       cacheThumbnails = false;
 
@@ -22,6 +24,7 @@ class PrysmCacheConfig {
   final int maxBytes;
   final Duration maxAge;
   final Duration preloadDuration;
+  final int firstChunkBytes;
   final bool cacheProtectedSources;
   final bool cacheThumbnails;
 }

@@ -31,6 +31,7 @@ class PrysmVideoState {
     this.looping = false,
     this.fullscreen = false,
     this.pictureInPicture = false,
+    this.casting = false,
     this.controlsLocked = false,
     this.availableTracks = const PrysmAvailableTracks(),
     this.selectedTracks = const PrysmSelectedTracks(),
@@ -57,6 +58,7 @@ class PrysmVideoState {
   final bool looping;
   final bool fullscreen;
   final bool pictureInPicture;
+  final bool casting;
   final bool controlsLocked;
   final PrysmAvailableTracks availableTracks;
   final PrysmSelectedTracks selectedTracks;
@@ -105,6 +107,7 @@ class PrysmVideoState {
     bool? looping,
     bool? fullscreen,
     bool? pictureInPicture,
+    bool? casting,
     bool? controlsLocked,
     PrysmAvailableTracks? availableTracks,
     PrysmSelectedTracks? selectedTracks,
@@ -130,6 +133,7 @@ class PrysmVideoState {
       looping: looping ?? this.looping,
       fullscreen: fullscreen ?? this.fullscreen,
       pictureInPicture: pictureInPicture ?? this.pictureInPicture,
+      casting: casting ?? this.casting,
       controlsLocked: controlsLocked ?? this.controlsLocked,
       availableTracks: availableTracks ?? this.availableTracks,
       selectedTracks: selectedTracks ?? this.selectedTracks,
@@ -159,6 +163,7 @@ class PrysmVideoState {
         other.looping == looping &&
         other.fullscreen == fullscreen &&
         other.pictureInPicture == pictureInPicture &&
+        other.casting == casting &&
         other.controlsLocked == controlsLocked &&
         other.availableTracks == availableTracks &&
         other.selectedTracks == selectedTracks &&
@@ -169,28 +174,31 @@ class PrysmVideoState {
   }
 
   @override
-  int get hashCode => Object.hash(
-      status,
-      source,
-      playing,
-      completed,
-      buffering,
-      live,
-      position,
-      duration,
-      bufferedPosition,
-      volume,
-      speed,
-      muted,
-      looping,
-      fullscreen,
-      pictureInPicture,
-      controlsLocked,
-      availableTracks,
-      selectedTracks,
-      selectedQuality,
-      metrics,
-  );
+  int get hashCode => Object.hashAll(<Object?>[
+    status,
+    source,
+    playing,
+    completed,
+    buffering,
+    live,
+    position,
+    duration,
+    bufferedPosition,
+    volume,
+    speed,
+    muted,
+    looping,
+    fullscreen,
+    pictureInPicture,
+    casting,
+    controlsLocked,
+    availableTracks,
+    selectedTracks,
+    Object.hashAll(availableQualities),
+    selectedQuality,
+    error,
+    metrics,
+  ]);
 
   static bool _listEquals<T>(List<T> a, List<T> b) {
     if (identical(a, b)) return true;

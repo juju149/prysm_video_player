@@ -3,11 +3,16 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
+import '../cache/prysm_video_cache.dart';
+import '../casting/prysm_cast.dart';
 import '../core/prysm_video_config.dart';
 import '../core/prysm_video_event.dart';
 import '../core/prysm_video_state.dart';
 import '../data_source/prysm_video_source.dart';
+import '../drm/prysm_drm_config.dart';
 import '../errors/prysm_video_error.dart';
+import '../media/prysm_media_integration.dart';
+import '../pip/prysm_picture_in_picture.dart';
 import '../playback/media_kit_playback_backend.dart';
 import '../playback/prysm_playback_backend.dart';
 import '../tracks/prysm_tracks.dart';
@@ -17,8 +22,20 @@ class PrysmVideoController extends ChangeNotifier {
     PrysmVideoSource? source,
     this.config = const PrysmVideoConfig(),
     PrysmPlaybackBackend? backend,
+    PrysmVideoCache? cache,
+    PrysmDrmAdapter? drmAdapter,
+    PrysmPictureInPictureAdapter? pictureInPicture,
+    PrysmMediaIntegration? mediaIntegration,
+    PrysmCastAdapter? castAdapter,
   }) : source = source,
-       _backend = backend ?? MediaKitPlaybackBackend() {
+       _backend = backend ?? MediaKitPlaybackBackend(),
+       _cache = cache ?? createPrysmVideoCache(),
+       _drmAdapter = drmAdapter ?? const PrysmNoopDrmAdapter(),
+       _pictureInPicture =
+           pictureInPicture ?? const PrysmNoopPictureInPictureAdapter(),
+       _mediaIntegration =
+           mediaIntegration ?? const PrysmNoopMediaIntegration(),
+       _castAdapter = castAdapter ?? const PrysmNoopCastAdapter() {
     _state = PrysmVideoState(
       source: source,
       volume: config.muted ? 0 : config.initialVolume.clamp(0, 100),
@@ -29,15 +46,29 @@ class PrysmVideoController extends ChangeNotifier {
     );
     _lastAudibleVolume = _state.volume > 0 ? _state.volume : 100;
     _bind();
+    _bindRemoteCommands();
     unawaited(_backend.setVolume(_state.volume));
     unawaited(_backend.setSpeed(_state.speed));
     unawaited(_backend.setLooping(config.looping));
+    unawaited(
+      _mediaIntegration.setBackgroundAudioEnabled(config.enableBackgroundAudio),
+    );
+    unawaited(
+      _mediaIntegration.setNotificationsEnabled(
+        config.enableMediaNotifications,
+      ),
+    );
     _emit(PrysmVideoEvent(type: PrysmVideoEventType.playerInitialized));
   }
 
   final PrysmVideoSource? source;
   final PrysmVideoConfig config;
   final PrysmPlaybackBackend _backend;
+  final PrysmVideoCache _cache;
+  final PrysmDrmAdapter _drmAdapter;
+  final PrysmPictureInPictureAdapter _pictureInPicture;
+  final PrysmMediaIntegration _mediaIntegration;
+  final PrysmCastAdapter _castAdapter;
   final List<StreamSubscription<Object?>> _subscriptions =
       <StreamSubscription<Object?>>[];
   final StreamController<PrysmVideoEvent> _events =
@@ -81,6 +112,7 @@ class PrysmVideoController extends ChangeNotifier {
               position: _state.position,
             ),
           );
+          unawaited(_syncMediaPlayback());
         }),
       )
       ..add(
@@ -146,6 +178,7 @@ class PrysmVideoController extends ChangeNotifier {
           if (clamped == _state.position) return;
           _lastPositionUpdate = now;
           _update(_state.copyWith(position: clamped));
+          unawaited(_syncMediaPlayback());
           if (_startupWatch.isRunning && value > Duration.zero) {
             _startupWatch.stop();
             _update(
@@ -160,12 +193,11 @@ class PrysmVideoController extends ChangeNotifier {
         }),
       )
       ..add(
-        _backend.duration.listen(
-          (value) {
-            if (value == _state.duration) return;
-            _update(_state.copyWith(duration: value));
-          },
-        ),
+        _backend.duration.listen((value) {
+          if (value == _state.duration) return;
+          _update(_state.copyWith(duration: value));
+          unawaited(_syncMediaMetadata());
+        }),
       )
       ..add(
         _backend.buffer.listen((value) {
@@ -189,12 +221,11 @@ class PrysmVideoController extends ChangeNotifier {
         }),
       )
       ..add(
-        _backend.speed.listen(
-          (value) {
-            if (value == _state.speed) return;
-            _update(_state.copyWith(speed: value));
-          },
-        ),
+        _backend.speed.listen((value) {
+          if (value == _state.speed) return;
+          _update(_state.copyWith(speed: value));
+          unawaited(_syncMediaPlayback());
+        }),
       )
       ..add(
         _backend.availableTracks.listen((value) {
@@ -211,12 +242,10 @@ class PrysmVideoController extends ChangeNotifier {
         }),
       )
       ..add(
-        _backend.selectedTracks.listen(
-          (value) {
-            if (value == _state.selectedTracks) return;
-            _update(_state.copyWith(selectedTracks: value));
-          },
-        ),
+        _backend.selectedTracks.listen((value) {
+          if (value == _state.selectedTracks) return;
+          _update(_state.copyWith(selectedTracks: value));
+        }),
       )
       ..add(
         _backend.errors.listen((value) {
@@ -227,6 +256,38 @@ class PrysmVideoController extends ChangeNotifier {
           _emit(PrysmVideoEvent(type: PrysmVideoEventType.error, error: error));
         }),
       );
+  }
+
+  void _bindRemoteCommands() {
+    _subscriptions.add(
+      _mediaIntegration.remoteCommands.listen((command) {
+        _emit(
+          PrysmVideoEvent(
+            type: PrysmVideoEventType.remoteCommandReceived,
+            position: _state.position,
+            data: <String, Object?>{'command': command.type.name},
+          ),
+        );
+        unawaited(_handleRemoteCommand(command));
+      }),
+    );
+  }
+
+  Future<void> _handleRemoteCommand(PrysmRemoteCommand command) {
+    return switch (command.type) {
+      PrysmRemoteCommandType.play => play(),
+      PrysmRemoteCommandType.pause => pause(),
+      PrysmRemoteCommandType.toggle => toggle(),
+      PrysmRemoteCommandType.stop => stop(),
+      PrysmRemoteCommandType.seekTo => seekTo(
+        command.position ?? _state.position,
+      ),
+      PrysmRemoteCommandType.seekBy => seekBy(command.delta ?? Duration.zero),
+      PrysmRemoteCommandType.forward => seekBy(config.seekStep),
+      PrysmRemoteCommandType.replay => seekBy(-config.seekStep),
+      PrysmRemoteCommandType.mute => mute(),
+      PrysmRemoteCommandType.unmute => unmute(),
+    };
   }
 
   Future<void> open(PrysmVideoSource source, {bool? play}) {
@@ -251,8 +312,40 @@ class PrysmVideoController extends ChangeNotifier {
           clearError: true,
         ),
       );
+
+      var resolvedSource = source;
+      final drm = source.drm;
+      if (drm != null) {
+        final drmExtras = await _drmAdapter.prepare(drm);
+        resolvedSource = resolvedSource.copyWith(
+          extras: <String, Object?>{...resolvedSource.extras, 'drm': drmExtras},
+        );
+        _emit(
+          PrysmVideoEvent(
+            type: PrysmVideoEventType.drmPrepared,
+            position: _state.position,
+            data: <String, Object?>{'scheme': drm.scheme.name},
+          ),
+        );
+      }
+
+      final cacheResult = await _cache.resolve(resolvedSource, config.cache);
+      resolvedSource = cacheResult.source;
+      _emit(
+        PrysmVideoEvent(
+          type: PrysmVideoEventType.cacheResolved,
+          position: _state.position,
+          data: <String, Object?>{
+            'reason': cacheResult.reason.name,
+            if (cacheResult.cacheKey != null) 'cacheKey': cacheResult.cacheKey,
+            if (cacheResult.path != null) 'path': cacheResult.path,
+            if (cacheResult.bytes != null) 'bytes': cacheResult.bytes,
+          },
+        ),
+      );
+
       await _backend.open(
-        source,
+        resolvedSource,
         quality: selectedQuality,
         play: play ?? config.autoPlay,
       );
@@ -266,6 +359,8 @@ class PrysmVideoController extends ChangeNotifier {
           position: _state.position,
         ),
       );
+      await _syncMediaMetadata();
+      await _syncMediaPlayback();
     });
   }
 
@@ -307,6 +402,9 @@ class PrysmVideoController extends ChangeNotifier {
           position: clamped,
         ),
       );
+      if (_state.casting) {
+        await _castAdapter.updatePosition(clamped);
+      }
     });
   }
 
@@ -418,14 +516,76 @@ class PrysmVideoController extends ChangeNotifier {
   }
 
   Future<void> enablePictureInPicture() async {
+    return _guard(() async {
+      final state = await _pictureInPicture.enter(_state);
+      _update(_state.copyWith(pictureInPicture: state.enabled));
+      _emit(
+        PrysmVideoEvent(
+          type: state.enabled
+              ? PrysmVideoEventType.pipEntered
+              : PrysmVideoEventType.pipExited,
+          position: _state.position,
+          data: <String, Object?>{'support': state.support.name},
+        ),
+      );
+    });
+  }
+
+  Future<void> disablePictureInPicture() async {
+    return _guard(() async {
+      final state = await _pictureInPicture.exit();
+      _update(_state.copyWith(pictureInPicture: state.enabled));
+      _emit(
+        PrysmVideoEvent(
+          type: PrysmVideoEventType.pipExited,
+          position: _state.position,
+          data: <String, Object?>{'support': state.support.name},
+        ),
+      );
+    });
+  }
+
+  Future<List<PrysmCastDevice>> discoverCastDevices() {
     _ensureNotDisposed();
-    _update(_state.copyWith(pictureInPicture: true));
-    _emit(
-      PrysmVideoEvent(
-        type: PrysmVideoEventType.pipEntered,
+    return _castAdapter.discover();
+  }
+
+  Future<PrysmCastSession> startCasting(PrysmCastDevice device) {
+    return _guardValue(() async {
+      final source = _state.source ?? _requireSource();
+      final session = await _castAdapter.start(
+        device: device,
+        source: source,
         position: _state.position,
-      ),
-    );
+      );
+      _update(_state.copyWith(casting: session.active));
+      _emit(
+        PrysmVideoEvent(
+          type: PrysmVideoEventType.castingStarted,
+          position: _state.position,
+          data: <String, Object?>{
+            'deviceId': device.id,
+            'deviceName': device.name,
+            'deviceType': device.type.name,
+            'active': session.active,
+          },
+        ),
+      );
+      return session;
+    });
+  }
+
+  Future<void> stopCasting() {
+    return _guard(() async {
+      await _castAdapter.stop();
+      _update(_state.copyWith(casting: false));
+      _emit(
+        PrysmVideoEvent(
+          type: PrysmVideoEventType.castingStopped,
+          position: _state.position,
+        ),
+      );
+    });
   }
 
   void setControlsLocked(bool locked) {
@@ -445,10 +605,50 @@ class PrysmVideoController extends ChangeNotifier {
     _events.add(event);
   }
 
+  Future<void> _syncMediaMetadata() async {
+    await _mediaIntegration.setMetadata(PrysmMediaMetadata.fromState(_state));
+    _emit(
+      PrysmVideoEvent(
+        type: PrysmVideoEventType.mediaSessionUpdated,
+        position: _state.position,
+        data: const <String, Object?>{'scope': 'metadata'},
+      ),
+    );
+  }
+
+  Future<void> _syncMediaPlayback() async {
+    await _mediaIntegration.setPlayback(
+      PrysmMediaPlaybackSnapshot.fromState(_state),
+    );
+    _emit(
+      PrysmVideoEvent(
+        type: PrysmVideoEventType.mediaSessionUpdated,
+        position: _state.position,
+        data: const <String, Object?>{'scope': 'playback'},
+      ),
+    );
+  }
+
   Future<void> _guard(Future<void> Function() body) async {
     _ensureNotDisposed();
     try {
       await body();
+    } catch (error) {
+      final mapped = error is PrysmVideoError
+          ? error
+          : PrysmVideoError.map(error);
+      _update(
+        _state.copyWith(status: PrysmPlaybackStatus.error, error: mapped),
+      );
+      _emit(PrysmVideoEvent(type: PrysmVideoEventType.error, error: mapped));
+      throw mapped;
+    }
+  }
+
+  Future<T> _guardValue<T>(Future<T> Function() body) async {
+    _ensureNotDisposed();
+    try {
+      return await body();
     } catch (error) {
       final mapped = error is PrysmVideoError
           ? error
@@ -530,6 +730,7 @@ class PrysmVideoController extends ChangeNotifier {
       ),
     );
     unawaited(_events.close());
+    unawaited(_mediaIntegration.dispose());
     unawaited(_backend.dispose());
     super.dispose();
   }

@@ -18,6 +18,12 @@ enum PrysmVideoEventType {
   fullscreenExited,
   pipEntered,
   pipExited,
+  cacheResolved,
+  drmPrepared,
+  mediaSessionUpdated,
+  remoteCommandReceived,
+  castingStarted,
+  castingStopped,
   disposed,
 }
 

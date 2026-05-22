@@ -234,6 +234,58 @@ class PrysmVideoSource {
   bool get isLive => type == PrysmVideoSourceType.live;
   bool get isPlaylist => type == PrysmVideoSourceType.playlist;
   bool get isMultiQuality => type == PrysmVideoSourceType.multiQuality;
+  bool get isAdaptiveStream =>
+      type == PrysmVideoSourceType.hls || type == PrysmVideoSourceType.dash;
+
+  PrysmVideoSource asCachedFile(String path) {
+    return PrysmVideoSource.file(
+      path,
+      title: title,
+      subtitle: subtitle,
+      poster: poster,
+      start: start,
+      end: end,
+      subtitles: externalSubtitles,
+    );
+  }
+
+  PrysmVideoSource copyWith({
+    PrysmVideoSourceType? type,
+    String? uri,
+    List<PrysmVideoSource>? items,
+    List<PrysmVideoQuality>? qualities,
+    Uint8List? bytes,
+    String? mimeType,
+    Map<String, String>? headers,
+    String? title,
+    String? subtitle,
+    String? poster,
+    Duration? start,
+    Duration? end,
+    List<PrysmSubtitleTrack>? externalSubtitles,
+    PrysmDrmConfig? drm,
+    Map<String, Object?>? extras,
+    bool? protected,
+  }) {
+    return PrysmVideoSource._(
+      type: type ?? this.type,
+      uri: uri ?? this.uri,
+      items: items ?? this.items,
+      qualities: qualities ?? this.qualities,
+      bytes: bytes ?? this.bytes,
+      mimeType: mimeType ?? this.mimeType,
+      headers: headers ?? this.headers,
+      title: title ?? this.title,
+      subtitle: subtitle ?? this.subtitle,
+      poster: poster ?? this.poster,
+      start: start ?? this.start,
+      end: end ?? this.end,
+      externalSubtitles: externalSubtitles ?? this.externalSubtitles,
+      drm: drm ?? this.drm,
+      extras: extras ?? this.extras,
+      protected: protected ?? this.protected,
+    );
+  }
 
   Future<Media> toMedia({PrysmVideoQuality? quality}) async {
     if (type == PrysmVideoSourceType.memory) {

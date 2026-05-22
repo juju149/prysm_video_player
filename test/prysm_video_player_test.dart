@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit_video/media_kit_video.dart';
@@ -152,10 +154,90 @@ Hello
 
       expect(find.text('focused'), findsOneWidget);
     });
+
+    test('opens cached source when cache resolves to a file', () async {
+      final backend = _FakeBackend();
+      final source = PrysmVideoSource.network(url: 'https://cdn/movie.mp4');
+      final controller = PrysmVideoController(
+        backend: backend,
+        cache: _FakeCache(source.asCachedFile('/tmp/movie.mp4')),
+        config: const PrysmVideoConfig(
+          cache: PrysmCacheConfig(policy: PrysmCachePolicy.fullFile),
+        ),
+      );
+      final events = <PrysmVideoEvent>[];
+      final subscription = controller.events.listen(events.add);
+
+      await controller.open(source);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(backend.openedSource?.type, PrysmVideoSourceType.file);
+      expect(
+        events.map((event) => event.type),
+        contains(PrysmVideoEventType.cacheResolved),
+      );
+
+      await subscription.cancel();
+      controller.dispose();
+    });
+
+    test('picture-in-picture adapter updates state', () async {
+      final controller = PrysmVideoController(
+        backend: _FakeBackend(),
+        pictureInPicture: const _FakePictureInPictureAdapter(),
+        config: const PrysmVideoConfig(enablePictureInPicture: true),
+      );
+
+      await controller.enablePictureInPicture();
+
+      expect(controller.state.pictureInPicture, isTrue);
+      controller.dispose();
+    });
+
+    test('remote media commands are routed to playback commands', () async {
+      final backend = _FakeBackend();
+      final media = _FakeMediaIntegration();
+      final controller = PrysmVideoController(
+        backend: backend,
+        mediaIntegration: media,
+      );
+
+      media.add(const PrysmRemoteCommand(type: PrysmRemoteCommandType.play));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(backend.playCalls, 1);
+      controller.dispose();
+      await media.dispose();
+    });
+
+    test('cast adapter starts and stops a session', () async {
+      final controller = PrysmVideoController(
+        source: PrysmVideoSource.network(url: 'https://cdn/movie.mp4'),
+        backend: _FakeBackend(),
+        castAdapter: const _FakeCastAdapter(),
+      );
+      const device = PrysmCastDevice(
+        id: 'living-room',
+        name: 'Living Room',
+        type: PrysmCastDeviceType.chromecast,
+      );
+
+      final session = await controller.startCasting(device);
+
+      expect(session.active, isTrue);
+      expect(controller.state.casting, isTrue);
+
+      await controller.stopCasting();
+      expect(controller.state.casting, isFalse);
+      controller.dispose();
+    });
   });
 }
 
 class _FakeBackend implements PrysmPlaybackBackend {
+  PrysmVideoSource? openedSource;
+  int playCalls = 0;
+
   @override
   VideoController get videoController => throw UnimplementedError();
 
@@ -211,13 +293,17 @@ class _FakeBackend implements PrysmPlaybackBackend {
     PrysmVideoSource source, {
     PrysmVideoQuality? quality,
     bool play = true,
-  }) async {}
+  }) async {
+    openedSource = source;
+  }
 
   @override
   Future<void> pause() async {}
 
   @override
-  Future<void> play() async {}
+  Future<void> play() async {
+    playCalls++;
+  }
 
   @override
   Future<void> playOrPause() async {}
@@ -245,4 +331,104 @@ class _FakeBackend implements PrysmPlaybackBackend {
 
   @override
   Future<void> stop() async {}
+}
+
+class _FakeCache implements PrysmVideoCache {
+  const _FakeCache(this.source);
+
+  final PrysmVideoSource source;
+
+  @override
+  Future<void> clear() async {}
+
+  @override
+  Future<void> evict(String cacheKey) async {}
+
+  @override
+  Future<PrysmCacheResolveResult> resolve(
+    PrysmVideoSource source,
+    PrysmCacheConfig config,
+  ) async {
+    return PrysmCacheResolveResult(
+      source: this.source,
+      reason: PrysmCacheResolveReason.hit,
+      cacheKey: 'cache-key',
+      path: this.source.uri,
+    );
+  }
+}
+
+class _FakePictureInPictureAdapter implements PrysmPictureInPictureAdapter {
+  const _FakePictureInPictureAdapter();
+
+  @override
+  Future<PrysmPictureInPictureState> enter(PrysmVideoState videoState) async {
+    return const PrysmPictureInPictureState(
+      support: PrysmPictureInPictureSupport.platformCustom,
+      enabled: true,
+    );
+  }
+
+  @override
+  Future<PrysmPictureInPictureState> exit() async {
+    return const PrysmPictureInPictureState(
+      support: PrysmPictureInPictureSupport.platformCustom,
+    );
+  }
+
+  @override
+  Future<PrysmPictureInPictureState> state() async {
+    return const PrysmPictureInPictureState(
+      support: PrysmPictureInPictureSupport.platformCustom,
+    );
+  }
+}
+
+class _FakeMediaIntegration implements PrysmMediaIntegration {
+  final StreamController<PrysmRemoteCommand> _commands =
+      StreamController<PrysmRemoteCommand>.broadcast();
+
+  void add(PrysmRemoteCommand command) => _commands.add(command);
+
+  @override
+  Stream<PrysmRemoteCommand> get remoteCommands => _commands.stream;
+
+  @override
+  Future<void> dispose() => _commands.close();
+
+  @override
+  Future<void> setBackgroundAudioEnabled(bool enabled) async {}
+
+  @override
+  Future<void> setMetadata(PrysmMediaMetadata metadata) async {}
+
+  @override
+  Future<void> setNotificationsEnabled(bool enabled) async {}
+
+  @override
+  Future<void> setPlayback(PrysmMediaPlaybackSnapshot playback) async {}
+}
+
+class _FakeCastAdapter implements PrysmCastAdapter {
+  const _FakeCastAdapter();
+
+  @override
+  Future<List<PrysmCastDevice>> discover() async {
+    return const <PrysmCastDevice>[];
+  }
+
+  @override
+  Future<PrysmCastSession> start({
+    required PrysmCastDevice device,
+    required PrysmVideoSource source,
+    Duration position = Duration.zero,
+  }) async {
+    return PrysmCastSession(device: device, active: true);
+  }
+
+  @override
+  Future<void> stop() async {}
+
+  @override
+  Future<void> updatePosition(Duration position) async {}
 }
