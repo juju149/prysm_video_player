@@ -151,11 +151,32 @@ class PrysmPlatformMediaIntegration implements PrysmMediaIntegration {
   final EventChannel _eventChannel;
 
   @override
-  late final Stream<PrysmRemoteCommand> remoteCommands = _eventChannel
-      .receiveBroadcastStream()
-      .map(_mapRemoteCommand)
-      .where((command) => command != null)
-      .cast<PrysmRemoteCommand>();
+  late final Stream<PrysmRemoteCommand> remoteCommands = (() {
+    StreamSubscription<dynamic>? subscription;
+    final controller = StreamController<PrysmRemoteCommand>.broadcast();
+    controller.onListen = () {
+      try {
+        subscription = _eventChannel.receiveBroadcastStream().listen(
+          (event) {
+            try {
+              final cmd = _mapRemoteCommand(event);
+              if (cmd != null) controller.add(cmd);
+            } catch (_) {
+              // ignore mapping errors
+            }
+          },
+          onError: (_) {},
+        );
+      } on MissingPluginException {
+        // Platform doesn't implement the channel; fall back to empty stream.
+      }
+    };
+    controller.onCancel = () async {
+      await subscription?.cancel();
+    };
+
+    return controller.stream;
+  })();
 
   @override
   Future<void> dispose() async {

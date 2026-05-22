@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:io' show Platform;
+
 import 'package:prysm_video_player/prysm_video_player.dart';
 
 void main() {
@@ -17,7 +19,7 @@ class PrysmExampleApp extends StatefulWidget {
 
 class _PrysmExampleAppState extends State<PrysmExampleApp> {
   static const _mp4 =
-      'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
+      'https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/1080/Big_Buck_Bunny_1080_10s_30MB.mp4';
 
   late final PrysmVideoController controller;
   final List<String> _events = <String>[];
@@ -59,7 +61,7 @@ Fine-grained custom controls
         label: '360p',
         height: 360,
         url:
-            'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+            'https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/1080/Big_Buck_Bunny_1080_10s_30MB.mp4',
       ),
       PrysmVideoQuality(id: '720p', label: '720p', height: 720, url: _mp4),
     ],
@@ -79,8 +81,10 @@ Fine-grained custom controls
         enableBackgroundAudio: true,
       ),
       cache: createPrysmVideoCache(),
-      pictureInPicture: PrysmPlatformPictureInPictureAdapter(),
-      mediaIntegration: PrysmPlatformMediaIntegration(),
+        pictureInPicture: PrysmPlatformPictureInPictureAdapter(),
+        mediaIntegration: Platform.isWindows
+          ? const PrysmNoopMediaIntegration()
+          : PrysmPlatformMediaIntegration(),
       drmAdapter: PrysmHttpDrmLicenseAdapter(),
       castAdapter: const PrysmNoopCastAdapter(),
     );
@@ -126,11 +130,13 @@ Fine-grained custom controls
                       onQualityDemo: () => controller.open(_qualityDemo),
                     ),
                     const SizedBox(height: 12),
-                    PrysmVideoPlayer(
-                      controller: controller,
-                      theme: theme,
-                      thumbnails: _thumbnails,
-                      customization: _customization,
+                    Flexible(
+                      child: PrysmVideoPlayer(
+                        controller: controller,
+                        theme: theme,
+                        thumbnails: _thumbnails,
+                        customization: _customization,
+                      ),
                     ),
                     const SizedBox(height: 12),
                     _EventPanel(events: _events),
