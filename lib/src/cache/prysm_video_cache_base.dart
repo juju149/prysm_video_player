@@ -27,7 +27,9 @@ class PrysmCacheResolveResult {
   final String? path;
   final int? bytes;
 
-  bool get resolvedToCachedFile => reason == PrysmCacheResolveReason.hit;
+  bool get resolvedToCachedFile =>
+      reason == PrysmCacheResolveReason.hit ||
+      reason == PrysmCacheResolveReason.miss;
 }
 
 abstract interface class PrysmVideoCache {

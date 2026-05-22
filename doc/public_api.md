@@ -50,7 +50,23 @@ Controller commands include `open`, `preload`, `play`, `pause`, `toggle`,
 `stop`, `seekTo`, `seekBy`, `replay10`, `forward10`, `setSpeed`, `setVolume`,
 `mute`, `unmute`, `toggleMute`, `setLooping`, `selectSubtitleTrack`,
 `selectAudioTrack`, `selectVideoQuality`, `enterFullscreen`, `exitFullscreen`,
-`enablePictureInPicture`, `setControlsLocked`, and `dispose`.
+`enablePictureInPicture`, `disablePictureInPicture`, `discoverCastDevices`,
+`startCasting`, `stopCasting`, `setControlsLocked`, and `dispose`.
+
+## Integration Adapters
+
+```dart
+final controller = PrysmVideoController(
+  cache: createPrysmVideoCache(),
+  drmAdapter: PrysmHttpDrmLicenseAdapter(),
+  pictureInPicture: PrysmPlatformPictureInPictureAdapter(),
+  mediaIntegration: PrysmPlatformMediaIntegration(),
+  castAdapter: PrysmPlatformCastAdapter(),
+);
+```
+
+Adapters are optional. Default implementations are no-op or platform-safe, so
+apps can opt into native behavior only on the targets they support.
 
 ## Stability
 

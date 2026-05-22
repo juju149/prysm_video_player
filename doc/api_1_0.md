@@ -33,7 +33,8 @@ contract includes:
 - track and quality selection: `selectSubtitleTrack`, `selectAudioTrack`,
   `selectVideoQuality`
 - presentation state: `enterFullscreen`, `exitFullscreen`,
-  `enablePictureInPicture`, `setControlsLocked`
+  `enablePictureInPicture`, `disablePictureInPicture`, `setControlsLocked`
+- casting: `discoverCastDevices`, `startCasting`, `stopCasting`
 
 Breaking changes to method names, parameter semantics, event ordering, disposal
 guards, or state fields require a major version.
@@ -49,6 +50,7 @@ semantically:
 - layout: fit and aspect ratio
 - controls: visibility, auto-hide, gestures, keyboard, TV controls
 - platform behavior: fullscreen, PiP, background pause/resume
+- background audio and media notification opt-ins
 - cache policy
 
 ## Source Contract
@@ -79,6 +81,12 @@ The stable customization slots are:
 - thumbnail preview configuration through `PrysmThumbnailConfig`
 - event bridge through `PrysmVideoPlayer.onEvent`
 - backend replacement through `PrysmPlaybackBackend`
+- cache replacement through `PrysmVideoCache`
+- DRM preparation and license requests through `PrysmDrmAdapter`
+- PiP through `PrysmPictureInPictureAdapter`
+- media sessions, notifications, background audio, and remote commands through
+  `PrysmMediaIntegration`
+- Chromecast, AirPlay, DLNA, or proprietary casting through `PrysmCastAdapter`
 
 Future granular slots such as top bar, bottom bar, progress bar, settings menu,
 loading overlay, and error overlay should be additive. Existing users must be

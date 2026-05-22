@@ -10,5 +10,6 @@ Implemented foundations:
 - `RepaintBoundary` around the video surface.
 - `PrysmPerformanceMetrics` for startup, seek, buffering and approximate backend metrics.
 - Optional source preloading through `controller.preload`.
+- Optional file cache for downloadable network/blob sources through `PrysmVideoCache`.
 
 Benchmarks to run are listed in `benchmark/README.md`. Real conclusions must include device, OS, backend, codec, resolution, bitrate and network profile.

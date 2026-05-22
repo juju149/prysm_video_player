@@ -21,6 +21,9 @@ and TV-style interfaces.
 - Theming through `PrysmVideoTheme`
 - Controller-first API and headless rendering for advanced apps
 - Custom controls through `PrysmVideoControlsBuilder`
+- File cache for downloadable network/blob sources through `PrysmVideoCache`
+- Optional adapters for PiP, media sessions, notifications, remote commands,
+  background audio, DRM license requests, Chromecast, and AirPlay
 
 ## Install
 
@@ -109,6 +112,29 @@ await controller.open(PrysmVideoSource.asset('assets/trailer.mp4'));
 await controller.setSpeed(1.25);
 await controller.seekBy(const Duration(seconds: 30));
 ```
+
+## Integration Adapters
+
+```dart
+final controller = PrysmVideoController(
+  source: PrysmVideoSource.network(url: 'https://cdn.example.com/movie.mp4'),
+  config: const PrysmVideoConfig(
+    cache: PrysmCacheConfig(policy: PrysmCachePolicy.fullFile),
+    enablePictureInPicture: true,
+    enableMediaNotifications: true,
+    enableBackgroundAudio: true,
+  ),
+  cache: createPrysmVideoCache(),
+  pictureInPicture: PrysmPlatformPictureInPictureAdapter(),
+  mediaIntegration: PrysmPlatformMediaIntegration(),
+  drmAdapter: PrysmHttpDrmLicenseAdapter(),
+  castAdapter: PrysmPlatformCastAdapter(),
+);
+```
+
+Platform adapters use stable Dart APIs and method-channel boundaries. Host apps
+or future federated implementations can provide native handlers without changing
+the public player API.
 
 ## Custom Controls
 

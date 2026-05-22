@@ -6,3 +6,6 @@
 - Added package CI for analyze, tests, and pub publish dry-run.
 - Documented the intended API 1.0 stability contract and validation matrix.
 - Aligned README examples with the controller-first API.
+- Added file cache infrastructure for downloadable network/blob sources.
+- Added PiP, media session, remote command, background audio, notification, DRM, and casting adapter contracts.
+- Added controller events and tests for cache resolution, PiP, remote commands, and casting.
