@@ -21,7 +21,7 @@ class _PrysmExampleAppState extends State<PrysmExampleApp> {
   // This is the safest default because it requires no external sprite.
   //
   // To enable image thumbnails, swap in one of the commented strategies below.
-  // See docs/public_api.md for details.
+  // See doc/public_api.md for details.
   final PrysmThumbnailConfig _thumbnails =
       const PrysmThumbnailConfig.timecodeOnly();
 
@@ -98,5 +98,3 @@ class _PrysmExampleAppState extends State<PrysmExampleApp> {
     );
   }
 }
-
-

@@ -1,5 +1,8 @@
 # Platform Support
 
+This table documents implementation status. Production support must be backed
+by the validation matrix in `doc/validation_matrix.md`.
+
 | Platform | Playback | Fullscreen | PiP | Subtitles | Audio tracks | Quality selection | Cache | DRM | Limitations |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Android | media_kit | Flutter route + system UI | API placeholder | External and embedded when backend exposes them | Backend exposed | Backend tracks or source variants | Strategy only | Architecture only | DRM requires native work and license integration |

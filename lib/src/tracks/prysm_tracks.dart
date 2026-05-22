@@ -94,8 +94,7 @@ class PrysmAudioTrack {
 
   @override
   bool operator ==(Object other) =>
-      identical(this, other) ||
-      (other is PrysmAudioTrack && other.id == id);
+      identical(this, other) || (other is PrysmAudioTrack && other.id == id);
 
   @override
   int get hashCode => id.hashCode;
@@ -174,8 +173,7 @@ class PrysmVideoTrack {
 
   @override
   bool operator ==(Object other) =>
-      identical(this, other) ||
-      (other is PrysmVideoTrack && other.id == id);
+      identical(this, other) || (other is PrysmVideoTrack && other.id == id);
 
   @override
   int get hashCode => id.hashCode;
@@ -207,7 +205,9 @@ class PrysmAvailableTracks {
     if (other is! PrysmAvailableTracks) return false;
     if (other.video.length != video.length ||
         other.audio.length != audio.length ||
-        other.subtitles.length != subtitles.length) return false;
+        other.subtitles.length != subtitles.length) {
+      return false;
+    }
     for (var i = 0; i < video.length; i++) {
       if (other.video[i] != video[i]) return false;
     }
@@ -222,9 +222,9 @@ class PrysmAvailableTracks {
 
   @override
   int get hashCode => Object.hash(
-      Object.hashAll(video),
-      Object.hashAll(audio),
-      Object.hashAll(subtitles),
+    Object.hashAll(video),
+    Object.hashAll(audio),
+    Object.hashAll(subtitles),
   );
 }
 

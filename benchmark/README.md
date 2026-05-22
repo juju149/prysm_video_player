@@ -1,5 +1,8 @@
 # Prysm video benchmarks
 
+Use `doc/validation_matrix.md` as the source of truth for required platforms,
+assets, metrics, and pass criteria.
+
 Run these scenarios manually per target platform until automated harnesses are added:
 
 - MP4 1080p startup time and time to first frame.

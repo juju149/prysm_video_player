@@ -87,9 +87,7 @@ class PrysmSeekPreview extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: config.hasImages ? _w : null,
-      constraints: config.hasImages
-          ? null
-          : const BoxConstraints(minWidth: 64),
+      constraints: config.hasImages ? null : const BoxConstraints(minWidth: 64),
       decoration: BoxDecoration(
         color: const Color(0xEA0D0D0D),
         borderRadius: BorderRadius.circular(PrysmDS.r8),
@@ -122,11 +120,7 @@ class PrysmSeekPreview extends StatelessWidget {
       borderRadius: const BorderRadius.vertical(
         top: Radius.circular(PrysmDS.r8 - 0.5),
       ),
-      child: SizedBox(
-        width: _w,
-        height: _h,
-        child: _buildImageContent(),
-      ),
+      child: SizedBox(width: _w, height: _h, child: _buildImageContent()),
     );
   }
 
@@ -145,7 +139,7 @@ class PrysmSeekPreview extends StatelessWidget {
         height: _h,
         fit: BoxFit.cover,
         gaplessPlayback: true,
-        errorBuilder: (_, __, ___) => const _LoadingPlaceholder(),
+        errorBuilder: (_, _, _) => const _LoadingPlaceholder(),
       );
     }
 
@@ -248,7 +242,7 @@ class _SpriteTile extends StatelessWidget {
               height: fullH,
               fit: BoxFit.fill,
               gaplessPlayback: true,
-              errorBuilder: (_, __, ___) =>
+              errorBuilder: (_, _, _) =>
                   const ColoredBox(color: Color(0xFF1C1C1C)),
             ),
           ),

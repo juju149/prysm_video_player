@@ -2,14 +2,14 @@
 
 A premium Flutter video player package built on top of `media_kit`.
 
-The package is designed as a high-level player API for product apps: simple to
-embed, responsive by default, and ready for mobile, desktop, web, and TV-style
-interfaces.
+The package is designed as a high-level player API for product apps: controller
+first, responsive by default, customizable, and ready for mobile, desktop, web,
+and TV-style interfaces.
 
 ## Features
 
 - Cross-platform playback through `media_kit`
-- Network, URI, file, asset, and memory sources
+- Network, HLS, DASH, live, playlist, file, asset, blob, and memory sources
 - HTTP headers and media metadata
 - Responsive controls for phones, tablets, desktop, web, and TV layouts
 - Keyboard shortcuts: space/K, arrows, M, F
@@ -19,7 +19,8 @@ interfaces.
 - Buffer progress, loading indicator, error surfacing
 - Loop, autoplay, initial volume, initial speed, aspect ratio, and fit options
 - Theming through `PrysmVideoTheme`
-- Controller-first API for advanced apps
+- Controller-first API and headless rendering for advanced apps
+- Custom controls through `PrysmVideoControlsBuilder`
 
 ## Install
 
@@ -49,8 +50,38 @@ void main() {
   runApp(const MaterialApp(home: Demo()));
 }
 
-class Demo extends StatelessWidget {
+class Demo extends StatefulWidget {
   const Demo({super.key});
+
+  @override
+  State<Demo> createState() => _DemoState();
+}
+
+class _DemoState extends State<Demo> {
+  late final PrysmVideoController controller;
+
+  @override
+  void initState() {
+    super.initState();
+    controller = PrysmVideoController(
+      source: PrysmVideoSource.network(
+        url: 'https://example.com/video.mp4',
+        title: 'Big Buck Bunny',
+        poster: 'https://example.com/poster.jpg',
+      ),
+      config: const PrysmVideoConfig(
+        aspectRatio: 16 / 9,
+        autoPlay: true,
+        looping: false,
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -58,18 +89,8 @@ class Demo extends StatelessWidget {
       backgroundColor: Colors.black,
       body: Center(
         child: PrysmVideoPlayer(
-          source: PrysmVideoSource.network(
-            'https://example.com/video.mp4',
-            title: 'Big Buck Bunny',
-            poster: 'https://example.com/poster.jpg',
-          ),
-          options: const PrysmVideoOptions(
-            aspectRatio: 16 / 9,
-            autoPlay: true,
-            loop: false,
-            title: 'Big Buck Bunny',
-            subtitle: 'Demo stream',
-          ),
+          controller: controller,
+          theme: const PrysmVideoTheme.dark(),
         ),
       ),
     );
@@ -81,22 +102,42 @@ class Demo extends StatelessWidget {
 
 ```dart
 final controller = PrysmVideoController(
-  options: const PrysmVideoOptions(autoPlay: false),
+  config: const PrysmVideoConfig(autoPlay: false),
 );
 
 await controller.open(PrysmVideoSource.asset('assets/trailer.mp4'));
-await controller.setRate(1.25);
-await controller.seekRelative(const Duration(seconds: 30));
+await controller.setSpeed(1.25);
+await controller.seekBy(const Duration(seconds: 30));
+```
+
+## Custom Controls
+
+```dart
+PrysmVideoPlayer(
+  controller: controller,
+  controls: (context, controller, state) {
+    return Align(
+      alignment: Alignment.bottomCenter,
+      child: TextButton(
+        onPressed: controller.toggle,
+        child: Text(state.playing ? 'Pause' : 'Play'),
+      ),
+    );
+  },
+);
 ```
 
 ## Source Types
 
 ```dart
-PrysmVideoSource.network('https://cdn.example.com/live.m3u8');
-PrysmVideoSource.uri('rtsp://example.com/live');
+PrysmVideoSource.network(url: 'https://cdn.example.com/movie.mp4');
+PrysmVideoSource.network(url: 'https://cdn.example.com/vod.m3u8');
+PrysmVideoSource.network(url: 'https://cdn.example.com/manifest.mpd');
+PrysmVideoSource.live(url: 'https://cdn.example.com/live.m3u8');
 PrysmVideoSource.file('/storage/emulated/0/movie.mkv');
 PrysmVideoSource.asset('assets/intro.mp4');
 PrysmVideoSource.memory(bytes, mimeType: 'video/mp4');
+PrysmVideoSource.playlist([sourceA, sourceB]);
 ```
 
 ## Platform Notes
@@ -108,12 +149,22 @@ and how the host app is packaged.
 For Android release builds, prefer app bundles or split per ABI to keep native
 video libraries efficient.
 
+See `doc/platform_support.md` and `doc/validation_matrix.md` before claiming
+support for a production target.
+
+## Stability
+
+The intended 1.0 public surface is documented in `doc/api_1_0.md`. Breaking
+changes to controller, source, config, theme, event, error, backend, and
+customization APIs should be avoided unless the package intentionally moves to a
+new major version.
+
 ## Roadmap
 
-- Audio/subtitle track picker UI
 - Playlist drawer
-- Thumbnail preview scrubbing
 - Chromecast/AirPlay adapters
-- DRM adapter interfaces
+- Native PiP integrations
+- DRM backends
+- Cache/offline adapters
 - Analytics hooks
 - TV focus traversal polish
