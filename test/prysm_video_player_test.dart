@@ -207,7 +207,6 @@ Hello
 
       expect(backend.playCalls, 1);
       controller.dispose();
-      await media.dispose();
     });
 
     test('cast adapter starts and stops a session', () async {
@@ -387,6 +386,7 @@ class _FakePictureInPictureAdapter implements PrysmPictureInPictureAdapter {
 class _FakeMediaIntegration implements PrysmMediaIntegration {
   final StreamController<PrysmRemoteCommand> _commands =
       StreamController<PrysmRemoteCommand>.broadcast();
+  bool _disposed = false;
 
   void add(PrysmRemoteCommand command) => _commands.add(command);
 
@@ -394,7 +394,11 @@ class _FakeMediaIntegration implements PrysmMediaIntegration {
   Stream<PrysmRemoteCommand> get remoteCommands => _commands.stream;
 
   @override
-  Future<void> dispose() => _commands.close();
+  Future<void> dispose() async {
+    if (_disposed) return;
+    _disposed = true;
+    await _commands.close();
+  }
 
   @override
   Future<void> setBackgroundAudioEnabled(bool enabled) async {}
