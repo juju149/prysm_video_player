@@ -44,6 +44,33 @@ PrysmVideoPlayer(
 );
 ```
 
+## Fine-Grained Customization
+
+`PrysmVideoCustomization` can replace or wrap individual player regions while
+leaving the default player layout intact.
+
+Available slots:
+
+- `controlsBuilder`
+- `loadingBuilder`
+- `errorBuilder`
+- `progressBarBuilder`
+- `settingsMenuBuilder`
+- `speedPickerBuilder`
+- `qualityPickerBuilder`
+- `subtitlePickerBuilder`
+- `audioPickerBuilder`
+- `subtitleRendererBuilder`
+- `topBarBuilder`
+- `bottomBarBuilder`
+- `gestureBuilder`
+- `keyboardShortcutHandler`
+- `tvFocusBuilder`
+
+Builders that wrap existing UI receive the default widget as `details.child`.
+Handlers receive `PrysmPlayerBuildContext`, which includes controller, state,
+config, theme, platform, visibility, fullscreen callback, and thumbnails.
+
 ## Controller Commands
 
 Controller commands include `open`, `preload`, `play`, `pause`, `toggle`,

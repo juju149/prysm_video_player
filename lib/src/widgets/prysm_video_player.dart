@@ -7,6 +7,7 @@ import '../controller/prysm_video_controller.dart';
 import '../core/prysm_video_config.dart';
 import '../core/prysm_video_event.dart';
 import '../core/prysm_video_state.dart';
+import '../customization/prysm_video_customization.dart';
 import '../fullscreen/prysm_fullscreen.dart';
 import '../theme/prysm_ds.dart';
 import '../theme/prysm_video_theme.dart';
@@ -35,6 +36,7 @@ class PrysmVideoPlayer extends StatefulWidget {
     this.onEvent,
     this.config,
     this.thumbnails,
+    this.customization = const PrysmVideoCustomization(),
   });
 
   final PrysmVideoController controller;
@@ -42,6 +44,7 @@ class PrysmVideoPlayer extends StatefulWidget {
   final PrysmVideoControlsBuilder? controls;
   final ValueChanged<PrysmVideoEvent>? onEvent;
   final PrysmVideoConfig? config;
+  final PrysmVideoCustomization customization;
 
   /// Optional seek-preview thumbnail configuration.
   ///
@@ -126,8 +129,25 @@ class _PrysmVideoPlayerState extends State<PrysmVideoPlayer> {
   // ── Keyboard ──────────────────────────────────────────────────────────────
 
   KeyEventResult _onKey(KeyEvent event) {
+    KeyEventResult finish(KeyEventResult result) {
+      final handler = widget.customization.keyboardShortcutHandler;
+      if (handler == null) return result;
+      final platform = context.playerPlatform(
+        MediaQuery.sizeOf(context).width,
+        widget.theme.density == PrysmControlsDensity.tv,
+      );
+      return handler(
+        context,
+        PrysmKeyboardShortcutDetails(
+          context: _playerBuildContext(platform),
+          event: event,
+          defaultResult: result,
+        ),
+      );
+    }
+
     if (!_config.enableKeyboard || event is! KeyDownEvent) {
-      return KeyEventResult.ignored;
+      return finish(KeyEventResult.ignored);
     }
     final key = event.logicalKey;
     if (key == LogicalKeyboardKey.space || key == LogicalKeyboardKey.keyK) {
@@ -154,17 +174,18 @@ class _PrysmVideoPlayerState extends State<PrysmVideoPlayer> {
         unawaited(_ctrl.seekTo(_ctrl.state.duration * (digit / 10)));
       }
     } else {
-      return KeyEventResult.ignored;
+      return finish(KeyEventResult.ignored);
     }
     _showControls();
-    return KeyEventResult.handled;
+    return finish(KeyEventResult.handled);
   }
 
   // ── Gestures ──────────────────────────────────────────────────────────────
 
   Offset? _doubleTapPos;
 
-  void _handleDoubleTapDown(TapDownDetails d) => _doubleTapPos = d.localPosition;
+  void _handleDoubleTapDown(TapDownDetails d) =>
+      _doubleTapPos = d.localPosition;
 
   void _handleDoubleTap(Size size) {
     final dx = _doubleTapPos?.dx ?? size.width / 2;
@@ -208,6 +229,20 @@ class _PrysmVideoPlayerState extends State<PrysmVideoPlayer> {
     );
   }
 
+  PrysmPlayerBuildContext _playerBuildContext(PrysmPlayerPlatform platform) {
+    return PrysmPlayerBuildContext(
+      controller: _ctrl,
+      state: _ctrl.state,
+      config: _config,
+      theme: widget.theme,
+      platform: platform,
+      visible: _controlsVisible,
+      onInteraction: _showControls,
+      onFullscreen: _config.enableFullscreen ? _enterFullscreen : null,
+      thumbnails: widget.thumbnails,
+    );
+  }
+
   // ── Build ─────────────────────────────────────────────────────────────────
 
   @override
@@ -215,6 +250,86 @@ class _PrysmVideoPlayerState extends State<PrysmVideoPlayer> {
     final player = LayoutBuilder(
       builder: (context, constraints) {
         final size = Size(constraints.maxWidth, constraints.maxHeight);
+        final platform = context.playerPlatform(
+          constraints.maxWidth,
+          widget.theme.density == PrysmControlsDensity.tv,
+        );
+        final details = _playerBuildContext(platform);
+        Widget interactiveChild = ColoredBox(
+          color: widget.theme.backgroundColor,
+          child: Stack(
+            fit: StackFit.expand,
+            children: <Widget>[
+              // ── Video surface (isolated repaint boundary) ──────────
+              PrysmVideoSurface(
+                controller: _ctrl,
+                fit: _config.fit,
+                aspectRatio: _config.aspectRatio,
+                pauseWhenBackgrounded: _config.pauseWhenBackgrounded,
+                resumeWhenForegrounded: _config.resumeWhenForegrounded,
+              ),
+
+              if (widget.customization.subtitleRendererBuilder != null)
+                AnimatedBuilder(
+                  animation: _ctrl,
+                  builder: (context, _) {
+                    final current = _playerBuildContext(platform);
+                    return widget.customization.subtitleRendererBuilder!(
+                      context,
+                      PrysmSubtitleRendererDetails(
+                        context: current,
+                        position: current.state.position,
+                        selectedTrack: current.state.selectedTracks.subtitle,
+                        subtitleStyle: widget.theme.subtitleStyle,
+                      ),
+                    );
+                  },
+                ),
+
+              // ── Always-visible state overlays ──────────────────────
+              if (_config.showControls)
+                _StateOverlay(
+                  controller: _ctrl,
+                  theme: widget.theme,
+                  customization: widget.customization,
+                  details: details,
+                ),
+
+              // ── Interactive controls overlay ───────────────────────
+              if (_config.showControls)
+                RepaintBoundary(
+                  child: widget.controls != null
+                      ? AnimatedBuilder(
+                          animation: _ctrl,
+                          builder: (context, _) =>
+                              widget.controls!(context, _ctrl, _ctrl.state),
+                        )
+                      : _PremiumControls(
+                          controller: _ctrl,
+                          visible: _controlsVisible,
+                          config: _config,
+                          theme: widget.theme,
+                          seekDir: _seekDir,
+                          onInteraction: _showControls,
+                          onFullscreen: _config.enableFullscreen
+                              ? _enterFullscreen
+                              : null,
+                          thumbnailConfig: widget.thumbnails,
+                          customization: widget.customization,
+                        ),
+                ),
+            ],
+          ),
+        );
+
+        final gestureBuilder = widget.customization.gestureBuilder;
+        if (gestureBuilder != null) {
+          interactiveChild = gestureBuilder(
+            context,
+            PrysmGestureDetails(context: details, child: interactiveChild),
+          );
+        }
+
         return MouseRegion(
           onHover: (_) => _showControls(),
           cursor: _controlsVisible || !_ctrl.state.fullscreen
@@ -227,60 +342,16 @@ class _PrysmVideoPlayerState extends State<PrysmVideoPlayer> {
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: _config.enableGestures ? _toggleControls : null,
-              onDoubleTapDown:
-                  _config.enableGestures ? _handleDoubleTapDown : null,
+              onDoubleTapDown: _config.enableGestures
+                  ? _handleDoubleTapDown
+                  : null,
               onDoubleTap: _config.enableGestures
                   ? () => _handleDoubleTap(size)
                   : null,
               onVerticalDragUpdate: _config.enableGestures
                   ? (d) => _handleVerticalDrag(d, size)
                   : null,
-              child: ColoredBox(
-                color: widget.theme.backgroundColor,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: <Widget>[
-                    // ── Video surface (isolated repaint boundary) ──────────
-                    PrysmVideoSurface(
-                      controller: _ctrl,
-                      fit: _config.fit,
-                      aspectRatio: _config.aspectRatio,
-                      pauseWhenBackgrounded: _config.pauseWhenBackgrounded,
-                      resumeWhenForegrounded: _config.resumeWhenForegrounded,
-                    ),
-
-                    // ── Always-visible state overlays ──────────────────────
-                    if (_config.showControls)
-                      _StateOverlay(controller: _ctrl, theme: widget.theme),
-
-                    // ── Interactive controls overlay ───────────────────────
-                    if (_config.showControls)
-                      RepaintBoundary(
-                        child: widget.controls != null
-                            ? AnimatedBuilder(
-                                animation: _ctrl,
-                                builder: (context, _) => widget.controls!(
-                                  context,
-                                  _ctrl,
-                                  _ctrl.state,
-                                ),
-                              )
-                            : _PremiumControls(
-                                controller: _ctrl,
-                                visible: _controlsVisible,
-                                config: _config,
-                                theme: widget.theme,
-                                seekDir: _seekDir,
-                                onInteraction: _showControls,
-                                onFullscreen: _config.enableFullscreen
-                                    ? _enterFullscreen
-                                    : null,
-                                thumbnailConfig: widget.thumbnails,
-                              ),
-                      ),
-                  ],
-                ),
-              ),
+              child: interactiveChild,
             ),
           ),
         );
@@ -298,10 +369,17 @@ class _PrysmVideoPlayerState extends State<PrysmVideoPlayer> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _StateOverlay extends StatelessWidget {
-  const _StateOverlay({required this.controller, required this.theme});
+  const _StateOverlay({
+    required this.controller,
+    required this.theme,
+    required this.customization,
+    required this.details,
+  });
 
   final PrysmVideoController controller;
   final PrysmVideoTheme theme;
+  final PrysmVideoCustomization customization;
+  final PrysmPlayerBuildContext details;
 
   @override
   Widget build(BuildContext context) {
@@ -310,16 +388,40 @@ class _StateOverlay extends StatelessWidget {
       builder: (context, _) {
         final state = controller.state;
         if (state.error != null) {
-          return Center(
-            child: _ErrorOverlay(
-              controller: controller,
-              state: state,
-              theme: theme,
-            ),
+          final defaultChild = _ErrorOverlay(
+            controller: controller,
+            state: state,
+            theme: theme,
           );
+          final builder = customization.errorBuilder;
+          if (builder != null) {
+            return Center(
+              child: builder(
+                context,
+                PrysmErrorDetails(
+                  context: details,
+                  error: state.error,
+                  retry: state.source == null
+                      ? null
+                      : () => unawaited(controller.open(state.source!)),
+                  child: defaultChild,
+                ),
+              ),
+            );
+          }
+          return Center(child: defaultChild);
         }
         if (state.buffering || state.status == PrysmPlaybackStatus.opening) {
-          return const Center(child: _LoadingSpinner());
+          const defaultChild = _LoadingSpinner();
+          final builder = customization.loadingBuilder;
+          return Center(
+            child: builder == null
+                ? defaultChild
+                : builder(
+                    context,
+                    PrysmLoadingDetails(context: details, child: defaultChild),
+                  ),
+          );
         }
         return const SizedBox.shrink();
       },
@@ -340,6 +442,7 @@ class _PremiumControls extends StatelessWidget {
     required this.seekDir,
     required this.onInteraction,
     required this.onFullscreen,
+    required this.customization,
     this.thumbnailConfig,
   });
 
@@ -350,6 +453,7 @@ class _PremiumControls extends StatelessWidget {
   final ValueNotifier<_SeekDir?> seekDir;
   final VoidCallback onInteraction;
   final Future<void> Function()? onFullscreen;
+  final PrysmVideoCustomization customization;
   final PrysmThumbnailConfig? thumbnailConfig;
 
   @override
@@ -359,41 +463,63 @@ class _PremiumControls extends StatelessWidget {
         final width = constraints.maxWidth;
         final isTv = theme.density == PrysmControlsDensity.tv;
         final platform = context.playerPlatform(width, isTv);
+        final details = PrysmPlayerBuildContext(
+          controller: controller,
+          state: controller.state,
+          config: config,
+          theme: theme,
+          platform: platform,
+          visible: visible,
+          onInteraction: onInteraction,
+          onFullscreen: onFullscreen,
+          thumbnails: thumbnailConfig,
+        );
 
         final controls = switch (platform) {
           PrysmPlayerPlatform.tv => _TvControls(
-              controller: controller,
-              visible: visible,
-              config: config,
-              theme: theme,
-              seekDir: seekDir,
-              onInteraction: onInteraction,
-              onFullscreen: onFullscreen,
-              thumbnailConfig: thumbnailConfig,
-            ),
+            controller: controller,
+            visible: visible,
+            config: config,
+            theme: theme,
+            seekDir: seekDir,
+            onInteraction: onInteraction,
+            onFullscreen: onFullscreen,
+            thumbnailConfig: thumbnailConfig,
+            customization: customization,
+            details: details,
+          ),
           PrysmPlayerPlatform.mobile => _MobileControls(
-              controller: controller,
-              visible: visible,
-              config: config,
-              theme: theme,
-              seekDir: seekDir,
-              onInteraction: onInteraction,
-              onFullscreen: onFullscreen,
-              thumbnailConfig: thumbnailConfig,
-            ),
+            controller: controller,
+            visible: visible,
+            config: config,
+            theme: theme,
+            seekDir: seekDir,
+            onInteraction: onInteraction,
+            onFullscreen: onFullscreen,
+            thumbnailConfig: thumbnailConfig,
+            customization: customization,
+            details: details,
+          ),
           PrysmPlayerPlatform.desktop => _DesktopControls(
-              controller: controller,
-              visible: visible,
-              config: config,
-              theme: theme,
-              seekDir: seekDir,
-              onInteraction: onInteraction,
-              onFullscreen: onFullscreen,
-              thumbnailConfig: thumbnailConfig,
-            ),
+            controller: controller,
+            visible: visible,
+            config: config,
+            theme: theme,
+            seekDir: seekDir,
+            onInteraction: onInteraction,
+            onFullscreen: onFullscreen,
+            thumbnailConfig: thumbnailConfig,
+            customization: customization,
+            details: details,
+          ),
         };
 
-        return controls;
+        final builder = customization.controlsBuilder;
+        if (builder == null) return controls;
+        return builder(
+          context,
+          PrysmOverlayDetails(context: details, child: controls),
+        );
       },
     );
   }
@@ -412,6 +538,8 @@ abstract class _ControlsLayout extends StatelessWidget {
     required this.seekDir,
     required this.onInteraction,
     required this.onFullscreen,
+    required this.customization,
+    required this.details,
     this.thumbnailConfig,
   });
 
@@ -422,19 +550,41 @@ abstract class _ControlsLayout extends StatelessWidget {
   final ValueNotifier<_SeekDir?> seekDir;
   final VoidCallback onInteraction;
   final Future<void> Function()? onFullscreen;
+  final PrysmVideoCustomization customization;
+  final PrysmPlayerBuildContext details;
   final PrysmThumbnailConfig? thumbnailConfig;
 
+  Widget buildTopBar(BuildContext context, Widget child) {
+    final builder = customization.topBarBuilder;
+    return builder == null
+        ? child
+        : builder(
+            context,
+            PrysmPlayerSectionDetails(context: details, child: child),
+          );
+  }
+
+  Widget buildBottomBar(BuildContext context, Widget child) {
+    final builder = customization.bottomBarBuilder;
+    return builder == null
+        ? child
+        : builder(
+            context,
+            PrysmPlayerSectionDetails(context: details, child: child),
+          );
+  }
+
   Widget buildScrim() => DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: PrysmDS.scrimColors,
-            stops: PrysmDS.scrimStops,
-          ),
-        ),
-        child: const SizedBox.expand(),
-      );
+    decoration: BoxDecoration(
+      gradient: LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: PrysmDS.scrimColors,
+        stops: PrysmDS.scrimStops,
+      ),
+    ),
+    child: const SizedBox.expand(),
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -450,6 +600,8 @@ class _MobileControls extends _ControlsLayout {
     required super.seekDir,
     required super.onInteraction,
     required super.onFullscreen,
+    required super.customization,
+    required super.details,
     super.thumbnailConfig,
   });
 
@@ -480,10 +632,13 @@ class _MobileControls extends _ControlsLayout {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
                     // Top bar
-                    _TopBar(
-                      controller: controller,
-                      theme: theme,
-                      onInteraction: onInteraction,
+                    buildTopBar(
+                      context,
+                      _TopBar(
+                        controller: controller,
+                        theme: theme,
+                        onInteraction: onInteraction,
+                      ),
                     ),
                     const Spacer(),
                     // Center: seek + play/pause
@@ -502,18 +657,23 @@ class _MobileControls extends _ControlsLayout {
                     ),
                     const Spacer(),
                     // Bottom bar
-                    _BottomBar(
-                      controller: controller,
-                      config: config,
-                      theme: theme,
-                      onInteraction: onInteraction,
-                      onFullscreen: onFullscreen,
-                      thumbnailConfig: thumbnailConfig,
-                      timeStyle: const TextStyle(
-                        color: Color(0xCCFFFFFF),
-                        fontSize: PrysmDS.textSm,
-                        fontWeight: FontWeight.w500,
-                        letterSpacing: 0.3,
+                    buildBottomBar(
+                      context,
+                      _BottomBar(
+                        controller: controller,
+                        config: config,
+                        theme: theme,
+                        onInteraction: onInteraction,
+                        onFullscreen: onFullscreen,
+                        thumbnailConfig: thumbnailConfig,
+                        customization: customization,
+                        details: details,
+                        timeStyle: const TextStyle(
+                          color: Color(0xCCFFFFFF),
+                          fontSize: PrysmDS.textSm,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: 0.3,
+                        ),
                       ),
                     ),
                   ],
@@ -540,6 +700,8 @@ class _DesktopControls extends _ControlsLayout {
     required super.seekDir,
     required super.onInteraction,
     required super.onFullscreen,
+    required super.customization,
+    required super.details,
     super.thumbnailConfig,
   });
 
@@ -565,10 +727,13 @@ class _DesktopControls extends _ControlsLayout {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    _TopBar(
-                      controller: controller,
-                      theme: theme,
-                      onInteraction: onInteraction,
+                    buildTopBar(
+                      context,
+                      _TopBar(
+                        controller: controller,
+                        theme: theme,
+                        onInteraction: onInteraction,
+                      ),
                     ),
                     const Spacer(),
                     Center(
@@ -585,18 +750,23 @@ class _DesktopControls extends _ControlsLayout {
                       ),
                     ),
                     const Spacer(),
-                    _BottomBar(
-                      controller: controller,
-                      config: config,
-                      theme: theme,
-                      onInteraction: onInteraction,
-                      onFullscreen: onFullscreen,
-                      thumbnailConfig: thumbnailConfig,
-                      timeStyle: const TextStyle(
-                        color: Color(0xCCFFFFFF),
-                        fontSize: PrysmDS.textMd,
-                        fontWeight: FontWeight.w500,
-                        letterSpacing: 0.3,
+                    buildBottomBar(
+                      context,
+                      _BottomBar(
+                        controller: controller,
+                        config: config,
+                        theme: theme,
+                        onInteraction: onInteraction,
+                        onFullscreen: onFullscreen,
+                        thumbnailConfig: thumbnailConfig,
+                        customization: customization,
+                        details: details,
+                        timeStyle: const TextStyle(
+                          color: Color(0xCCFFFFFF),
+                          fontSize: PrysmDS.textMd,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: 0.3,
+                        ),
                       ),
                     ),
                   ],
@@ -623,6 +793,8 @@ class _TvControls extends _ControlsLayout {
     required super.seekDir,
     required super.onInteraction,
     required super.onFullscreen,
+    required super.customization,
+    required super.details,
     super.thumbnailConfig,
   });
 
@@ -651,11 +823,14 @@ class _TvControls extends _ControlsLayout {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    _TopBar(
-                      controller: controller,
-                      theme: theme,
-                      onInteraction: onInteraction,
-                      titleFontSize: PrysmDS.textXl,
+                    buildTopBar(
+                      context,
+                      _TopBar(
+                        controller: controller,
+                        theme: theme,
+                        onInteraction: onInteraction,
+                        titleFontSize: PrysmDS.textXl,
+                      ),
                     ),
                     const Spacer(),
                     // TV: progress bar full width at bottom
@@ -665,6 +840,8 @@ class _TvControls extends _ControlsLayout {
                       onInteraction: onInteraction,
                       thumbnailConfig: thumbnailConfig,
                       isTv: true,
+                      customization: customization,
+                      details: details,
                     ),
                     const SizedBox(height: PrysmDS.sp16),
                     Row(
@@ -672,12 +849,16 @@ class _TvControls extends _ControlsLayout {
                         _TimeDisplay(controller: controller, theme: theme),
                         const Spacer(),
                         // TV action row — large buttons, focused navigation
-                        _TvActionRow(
-                          controller: controller,
-                          config: config,
-                          theme: theme,
-                          onInteraction: onInteraction,
-                          onFullscreen: onFullscreen,
+                        _TvFocusHost(
+                          customization: customization,
+                          details: details,
+                          child: _TvActionRow(
+                            controller: controller,
+                            config: config,
+                            theme: theme,
+                            onInteraction: onInteraction,
+                            onFullscreen: onFullscreen,
+                          ),
                         ),
                       ],
                     ),
@@ -864,6 +1045,8 @@ class _BottomBar extends StatelessWidget {
     required this.onInteraction,
     required this.onFullscreen,
     required this.timeStyle,
+    required this.customization,
+    required this.details,
     this.thumbnailConfig,
   });
 
@@ -873,6 +1056,8 @@ class _BottomBar extends StatelessWidget {
   final VoidCallback onInteraction;
   final Future<void> Function()? onFullscreen;
   final TextStyle timeStyle;
+  final PrysmVideoCustomization customization;
+  final PrysmPlayerBuildContext details;
   final PrysmThumbnailConfig? thumbnailConfig;
 
   @override
@@ -885,6 +1070,8 @@ class _BottomBar extends StatelessWidget {
           theme: theme,
           onInteraction: onInteraction,
           thumbnailConfig: thumbnailConfig,
+          customization: customization,
+          details: details,
         ),
         const SizedBox(height: PrysmDS.sp4),
         Row(
@@ -900,6 +1087,8 @@ class _BottomBar extends StatelessWidget {
               controller: controller,
               theme: theme,
               onInteraction: onInteraction,
+              customization: customization,
+              details: details,
             ),
             const SizedBox(width: PrysmDS.sp4),
             AnimatedBuilder(
@@ -1051,6 +1240,52 @@ class _TvActionRow extends StatelessWidget {
   }
 }
 
+class _TvFocusHost extends StatefulWidget {
+  const _TvFocusHost({
+    required this.customization,
+    required this.details,
+    required this.child,
+  });
+
+  final PrysmVideoCustomization customization;
+  final PrysmPlayerBuildContext details;
+  final Widget child;
+
+  @override
+  State<_TvFocusHost> createState() => _TvFocusHostState();
+}
+
+class _TvFocusHostState extends State<_TvFocusHost> {
+  final FocusNode _focusNode = FocusNode(debugLabel: 'PrysmVideoTvActions');
+  bool _focused = false;
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final child = Focus(
+      focusNode: _focusNode,
+      onFocusChange: (value) => setState(() => _focused = value),
+      child: widget.child,
+    );
+    final builder = widget.customization.tvFocusBuilder;
+    if (builder == null) return child;
+    return builder(
+      context,
+      PrysmTvFocusDetails(
+        context: widget.details,
+        child: child,
+        focusNode: _focusNode,
+        focused: _focused,
+      ),
+    );
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Primitive widgets
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1094,10 +1329,10 @@ class _PlayerButtonState extends State<_PlayerButton> {
         height: widget.size,
         decoration: BoxDecoration(
           color: _pressed
-              ? Colors.white.withAlpha(61)   // ~0.24
+              ? Colors.white.withAlpha(61) // ~0.24
               : _hovered
-                  ? Colors.white.withAlpha(41) // ~0.16
-                  : Colors.transparent,
+              ? Colors.white.withAlpha(41) // ~0.16
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(widget.size / 2),
         ),
         child: Center(
@@ -1127,11 +1362,7 @@ class _PlayerButtonState extends State<_PlayerButton> {
         onTapDown: (_) => setState(() => _pressed = true),
         onTapUp: (_) => setState(() => _pressed = false),
         onTapCancel: () => setState(() => _pressed = false),
-        child: Semantics(
-          button: true,
-          label: widget.tooltip,
-          child: btn,
-        ),
+        child: Semantics(button: true, label: widget.tooltip, child: btn),
       ),
     );
   }
@@ -1191,8 +1422,8 @@ class _PlayPauseButtonState extends State<_PlayPauseButton> {
                 color: _pressed
                     ? Colors.white.withAlpha(66)
                     : _hovered
-                        ? Colors.white.withAlpha(46)
-                        : Colors.white.withAlpha(26),
+                    ? Colors.white.withAlpha(46)
+                    : Colors.white.withAlpha(26),
                 borderRadius: BorderRadius.circular(widget.size / 2),
                 boxShadow: <BoxShadow>[
                   BoxShadow(
@@ -1274,6 +1505,8 @@ class _ProgressBar extends StatefulWidget {
     required this.controller,
     required this.theme,
     required this.onInteraction,
+    required this.customization,
+    required this.details,
     this.thumbnailConfig,
     this.isTv = false,
   });
@@ -1281,6 +1514,8 @@ class _ProgressBar extends StatefulWidget {
   final PrysmVideoController controller;
   final PrysmVideoTheme theme;
   final VoidCallback onInteraction;
+  final PrysmVideoCustomization customization;
+  final PrysmPlayerBuildContext details;
 
   /// Optional thumbnail configuration. When null, no preview is shown.
   final PrysmThumbnailConfig? thumbnailConfig;
@@ -1304,8 +1539,9 @@ class _ProgressBarState extends State<_ProgressBar>
 
   // ── Preview state ─────────────────────────────────────────────────────────
   // Updated without setState to avoid unnecessary CustomPaint rebuilds.
-  final ValueNotifier<_SeekPreviewState> _previewNotifier =
-      ValueNotifier(const _SeekPreviewState());
+  final ValueNotifier<_SeekPreviewState> _previewNotifier = ValueNotifier(
+    const _SeekPreviewState(),
+  );
   final PrysmThumbnailCache _thumbCache = PrysmThumbnailCache();
   Timer? _thumbTimer;
   PrysmThumbnailResult? _lastResult;
@@ -1323,9 +1559,10 @@ class _ProgressBarState extends State<_ProgressBar>
       begin: PrysmDS.trackIdle,
       end: PrysmDS.trackActive,
     ).animate(CurvedAnimation(parent: _hoverCtrl, curve: PrysmDS.curveOut));
-    _thumbOp = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(parent: _hoverCtrl, curve: PrysmDS.curveOut),
-    );
+    _thumbOp = Tween<double>(
+      begin: 0,
+      end: 1,
+    ).animate(CurvedAnimation(parent: _hoverCtrl, curve: PrysmDS.curveOut));
     _lastSourceId = widget.controller.state.source?.uri;
     widget.controller.addListener(_onControllerChanged);
   }
@@ -1389,10 +1626,7 @@ class _ProgressBarState extends State<_ProgressBar>
 
     _thumbTimer?.cancel();
     if (cfg.provider != null && dur > Duration.zero) {
-      _thumbTimer = Timer(
-        cfg.throttle,
-        () => _resolveThumb(progress, ts, dur),
-      );
+      _thumbTimer = Timer(cfg.throttle, () => _resolveThumb(progress, ts, dur));
     }
   }
 
@@ -1403,11 +1637,7 @@ class _ProgressBarState extends State<_ProgressBar>
     _previewNotifier.value = _previewNotifier.value.copyWith(visible: false);
   }
 
-  Future<void> _resolveThumb(
-    double progress,
-    Duration ts,
-    Duration dur,
-  ) async {
+  Future<void> _resolveThumb(double progress, Duration ts, Duration dur) async {
     try {
       final provider = widget.thumbnailConfig?.provider;
       if (provider == null || !mounted || _disposed) return;
@@ -1470,7 +1700,7 @@ class _ProgressBarState extends State<_ProgressBar>
   Widget build(BuildContext context) {
     final hasThumbnails = widget.thumbnailConfig != null;
 
-    return LayoutBuilder(
+    final defaultBar = LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
 
@@ -1483,8 +1713,7 @@ class _ProgressBarState extends State<_ProgressBar>
           },
           onHover: hasThumbnails
               ? (event) {
-                  final p =
-                      (event.localPosition.dx / width).clamp(0.0, 1.0);
+                  final p = (event.localPosition.dx / width).clamp(0.0, 1.0);
                   _showPreview(p);
                 }
               : null,
@@ -1531,9 +1760,10 @@ class _ProgressBarState extends State<_ProgressBar>
               height: 28,
               width: double.infinity,
               child: AnimatedBuilder(
-                animation: Listenable.merge(
-                  <Listenable>[widget.controller, _hoverCtrl],
-                ),
+                animation: Listenable.merge(<Listenable>[
+                  widget.controller,
+                  _hoverCtrl,
+                ]),
                 builder: (context, _) {
                   final state = widget.controller.state;
                   final progress = _dragging
@@ -1580,8 +1810,7 @@ class _ProgressBarState extends State<_ProgressBar>
                   child: IgnorePointer(
                     child: AnimatedScale(
                       scale: state.visible ? 1.0 : 0.88,
-                      duration:
-                          state.visible ? PrysmDS.fast : PrysmDS.standard,
+                      duration: state.visible ? PrysmDS.fast : PrysmDS.standard,
                       curve: PrysmDS.curveOut,
                       alignment: Alignment.bottomCenter,
                       child: AnimatedOpacity(
@@ -1611,6 +1840,16 @@ class _ProgressBarState extends State<_ProgressBar>
           ],
         );
       },
+    );
+    final builder = widget.customization.progressBarBuilder;
+    if (builder == null) return defaultBar;
+    return builder(
+      context,
+      PrysmProgressBarDetails(
+        context: widget.details,
+        isTv: widget.isTv,
+        child: defaultBar,
+      ),
     );
   }
 }
@@ -1724,7 +1963,8 @@ class _TimeDisplay extends StatelessWidget {
             : '${_fmt(state.position)} / ${_fmt(state.duration)}';
         return Text(
           text,
-          style: style ??
+          style:
+              style ??
               TextStyle(
                 color: theme.secondaryColor,
                 fontSize: PrysmDS.textSm,
@@ -1743,11 +1983,15 @@ class _SettingsButton extends StatelessWidget {
     required this.controller,
     required this.theme,
     required this.onInteraction,
+    required this.customization,
+    required this.details,
   });
 
   final PrysmVideoController controller;
   final PrysmVideoTheme theme;
   final VoidCallback onInteraction;
+  final PrysmVideoCustomization customization;
+  final PrysmPlayerBuildContext details;
 
   @override
   Widget build(BuildContext context) {
@@ -1769,20 +2013,37 @@ class _SettingsButton extends StatelessWidget {
       context: context,
       backgroundColor: Colors.transparent,
       barrierColor: Colors.black38,
-      builder: (ctx) => _SettingsSheet(
-        controller: controller,
-        theme: theme,
-      ),
+      builder: (ctx) {
+        final defaultSheet = _SettingsSheet(
+          controller: controller,
+          theme: theme,
+          customization: customization,
+          details: details,
+        );
+        final builder = customization.settingsMenuBuilder;
+        if (builder == null) return defaultSheet;
+        return builder(
+          ctx,
+          PrysmSettingsMenuDetails(context: details, child: defaultSheet),
+        );
+      },
     );
   }
 }
 
 // Settings main sheet
 class _SettingsSheet extends StatelessWidget {
-  const _SettingsSheet({required this.controller, required this.theme});
+  const _SettingsSheet({
+    required this.controller,
+    required this.theme,
+    required this.customization,
+    required this.details,
+  });
 
   final PrysmVideoController controller;
   final PrysmVideoTheme theme;
+  final PrysmVideoCustomization customization;
+  final PrysmPlayerBuildContext details;
 
   @override
   Widget build(BuildContext context) {
@@ -1834,6 +2095,10 @@ class _SettingsSheet extends StatelessWidget {
       label: (v) => v == 1 ? '1× (Normal)' : '$v×',
       selected: current,
       onSelected: controller.setSpeed,
+      customization: customization,
+      details: details,
+      kind: PrysmTrackPickerKind.speed,
+      builder: customization.speedPickerBuilder,
     );
   }
 
@@ -1846,6 +2111,10 @@ class _SettingsSheet extends StatelessWidget {
       label: (v) => v.label,
       selected: state.selectedQuality,
       onSelected: controller.selectVideoQuality,
+      customization: customization,
+      details: details,
+      kind: PrysmTrackPickerKind.quality,
+      builder: customization.qualityPickerBuilder,
     );
   }
 
@@ -1858,6 +2127,10 @@ class _SettingsSheet extends StatelessWidget {
       label: (v) => v.label,
       selected: state.selectedTracks.subtitle,
       onSelected: (v) => controller.selectSubtitleTrack(v.id),
+      customization: customization,
+      details: details,
+      kind: PrysmTrackPickerKind.subtitles,
+      builder: customization.subtitlePickerBuilder,
     );
   }
 
@@ -1870,6 +2143,10 @@ class _SettingsSheet extends StatelessWidget {
       label: (v) => v.label,
       selected: state.selectedTracks.audio,
       onSelected: (v) => controller.selectAudioTrack(v.id),
+      customization: customization,
+      details: details,
+      kind: PrysmTrackPickerKind.audio,
+      builder: customization.audioPickerBuilder,
     );
   }
 }
@@ -2012,10 +2289,7 @@ class _SheetRowState extends State<_SheetRow> {
 enum _SeekDir { left, right }
 
 class _SeekFeedback extends StatefulWidget {
-  const _SeekFeedback({
-    required this.notifier,
-    required this.seconds,
-  });
+  const _SeekFeedback({required this.notifier, required this.seconds});
 
   final ValueNotifier<_SeekDir?> notifier;
   final int seconds;
@@ -2257,8 +2531,8 @@ class _RetryButtonState extends State<_RetryButton> {
             color: _pressed
                 ? Colors.white.withAlpha(230)
                 : _hovered
-                    ? Colors.white.withAlpha(245)
-                    : Colors.white,
+                ? Colors.white.withAlpha(245)
+                : Colors.white,
             borderRadius: BorderRadius.circular(PrysmDS.rFull),
           ),
           child: Text(
@@ -2287,86 +2561,107 @@ Future<void> _showChoiceSheet<T>(
   required String Function(T) label,
   required T selected,
   required Future<void> Function(T) onSelected,
+  required PrysmVideoCustomization customization,
+  required PrysmPlayerBuildContext details,
+  required PrysmTrackPickerKind kind,
+  required PrysmTrackPickerBuilder<T>? builder,
 }) {
+  Widget defaultSheet(BuildContext ctx) => DraggableScrollableSheet(
+    initialChildSize: 0.5,
+    minChildSize: 0.25,
+    maxChildSize: 0.85,
+    expand: false,
+    builder: (context, scrollCtrl) => Container(
+      margin: const EdgeInsets.fromLTRB(
+        PrysmDS.sp12,
+        0,
+        PrysmDS.sp12,
+        PrysmDS.sp12,
+      ),
+      decoration: BoxDecoration(
+        color: const Color(0xFF141414),
+        borderRadius: BorderRadius.circular(PrysmDS.r16),
+        border: Border.all(color: Colors.white.withAlpha(15)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Center(
+            child: Container(
+              margin: const EdgeInsets.only(top: PrysmDS.sp12),
+              width: 32,
+              height: 3,
+              decoration: BoxDecoration(
+                color: Colors.white.withAlpha(50),
+                borderRadius: BorderRadius.circular(PrysmDS.rFull),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              PrysmDS.sp20,
+              PrysmDS.sp16,
+              PrysmDS.sp20,
+              PrysmDS.sp8,
+            ),
+            child: Text(
+              title,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: PrysmDS.textLg,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.2,
+              ),
+            ),
+          ),
+          Expanded(
+            child: ListView.builder(
+              controller: scrollCtrl,
+              itemCount: values.length,
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.paddingOf(context).bottom + PrysmDS.sp8,
+              ),
+              itemBuilder: (context, i) {
+                final value = values[i];
+                final isSelected = value == selected;
+                return _ChoiceItem(
+                  label: label(value),
+                  selected: isSelected,
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    unawaited(onSelected(value));
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+
   return showModalBottomSheet<void>(
     context: context,
     backgroundColor: Colors.transparent,
     barrierColor: Colors.black38,
     isScrollControlled: true,
-    builder: (ctx) => DraggableScrollableSheet(
-      initialChildSize: 0.5,
-      minChildSize: 0.25,
-      maxChildSize: 0.85,
-      expand: false,
-      builder: (context, scrollCtrl) => Container(
-        margin: const EdgeInsets.fromLTRB(
-          PrysmDS.sp12,
-          0,
-          PrysmDS.sp12,
-          PrysmDS.sp12,
+    builder: (ctx) {
+      final child = defaultSheet(ctx);
+      if (builder == null) return child;
+      return builder(
+        ctx,
+        PrysmTrackPickerDetails<T>(
+          context: details,
+          kind: kind,
+          title: title,
+          values: values,
+          selected: selected,
+          label: label,
+          onSelected: onSelected,
+          child: child,
         ),
-        decoration: BoxDecoration(
-          color: const Color(0xFF141414),
-          borderRadius: BorderRadius.circular(PrysmDS.r16),
-          border: Border.all(color: Colors.white.withAlpha(15)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Center(
-              child: Container(
-                margin: const EdgeInsets.only(top: PrysmDS.sp12),
-                width: 32,
-                height: 3,
-                decoration: BoxDecoration(
-                  color: Colors.white.withAlpha(50),
-                  borderRadius: BorderRadius.circular(PrysmDS.rFull),
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                PrysmDS.sp20,
-                PrysmDS.sp16,
-                PrysmDS.sp20,
-                PrysmDS.sp8,
-              ),
-              child: Text(
-                title,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: PrysmDS.textLg,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.2,
-                ),
-              ),
-            ),
-            Expanded(
-              child: ListView.builder(
-                controller: scrollCtrl,
-                itemCount: values.length,
-                padding: EdgeInsets.only(
-                  bottom:
-                      MediaQuery.paddingOf(context).bottom + PrysmDS.sp8,
-                ),
-                itemBuilder: (context, i) {
-                  final value = values[i];
-                  final isSelected = value == selected;
-                  return _ChoiceItem(
-                    label: label(value),
-                    selected: isSelected,
-                    onTap: () {
-                      Navigator.of(context).pop();
-                      unawaited(onSelected(value));
-                    },
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    ),
+      );
+    },
   );
 }
 

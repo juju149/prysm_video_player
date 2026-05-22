@@ -9,6 +9,7 @@ Layers:
 - Playback backend: `PrysmPlaybackBackend` abstracts the engine. `MediaKitPlaybackBackend` is the default implementation.
 - Data sources: `PrysmVideoSource` models network, HLS, DASH, file, asset, blob, live, playlist and multi-quality sources.
 - UI: `PrysmVideoSurface` is headless video rendering. `PrysmVideoPlayer` composes surface plus default premium controls. Custom controls can replace all UI.
+- Customization: `PrysmVideoCustomization` exposes granular builders for overlays, progress, menus, pickers, subtitles, gestures, keyboard handling, and TV focus without forcing callers to replace the whole controls layer.
 - Integration layers: `cache`, `drm`, `pip`, `media`, and `casting` expose separated extension points. The default cache stores downloadable files on IO platforms; native/device features are adapter driven.
 - Platform layers: `desktop`, `tv`, `web` and `fullscreen` keep UI and platform policy isolated.
 

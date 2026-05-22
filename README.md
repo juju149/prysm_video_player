@@ -44,6 +44,7 @@ dependencies:
 
 ```dart
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:prysm_video_player/prysm_video_player.dart';
 
 void main() {
@@ -152,6 +153,45 @@ PrysmVideoPlayer(
   },
 );
 ```
+
+## Fine-Grained Customization
+
+```dart
+PrysmVideoPlayer(
+  controller: controller,
+  customization: PrysmVideoCustomization(
+    loadingBuilder: (context, details) => MyLoading(child: details.child),
+    errorBuilder: (context, details) => MyError(
+      error: details.error,
+      retry: details.retry,
+      child: details.child,
+    ),
+    progressBarBuilder: (context, details) => MyProgressBar(
+      controller: details.context.controller,
+      child: details.child,
+    ),
+    topBarBuilder: (context, details) => MyTopBar(child: details.child),
+    bottomBarBuilder: (context, details) => MyBottomBar(child: details.child),
+    subtitleRendererBuilder: (context, details) => MySubtitleOverlay(
+      position: details.position,
+      selectedTrack: details.selectedTrack,
+    ),
+    keyboardShortcutHandler: (context, details) {
+      if (details.event.logicalKey == LogicalKeyboardKey.keyL) {
+        details.context.controller.setLooping(
+          !details.context.state.looping,
+        );
+        return KeyEventResult.handled;
+      }
+      return details.defaultResult;
+    },
+  ),
+);
+```
+
+Fine-grained builders exist for loading, error, full controls overlay, progress
+bar, settings menu, speed/quality/subtitle/audio pickers, subtitle renderer, top
+bar, bottom bar, gesture wrapper, keyboard shortcuts, and TV focus.
 
 ## Source Types
 

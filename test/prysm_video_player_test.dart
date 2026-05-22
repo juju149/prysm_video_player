@@ -117,6 +117,56 @@ Hello
       expect(theme.labels.play, 'Play');
       expect(theme.subtitleStyle.bottomOffset, 72);
     });
+
+    testWidgets('customization builders receive default children', (
+      tester,
+    ) async {
+      final controller = PrysmVideoController(backend: _FakeBackend());
+      final details = PrysmPlayerBuildContext(
+        controller: controller,
+        state: controller.state,
+        config: const PrysmVideoConfig(),
+        theme: const PrysmVideoTheme.dark(),
+        platform: PrysmPlayerPlatform.desktop,
+        visible: true,
+        onInteraction: () {},
+        onFullscreen: null,
+        thumbnails: null,
+      );
+      const child = Text('default');
+
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: Builder(
+            builder: (context) {
+              final customization = PrysmVideoCustomization(
+                progressBarBuilder: (context, details) {
+                  return Column(
+                    children: <Widget>[
+                      const Text('custom-progress'),
+                      details.child,
+                    ],
+                  );
+                },
+              );
+              return customization.progressBarBuilder!(
+                context,
+                PrysmProgressBarDetails(
+                  context: details,
+                  isTv: false,
+                  child: child,
+                ),
+              );
+            },
+          ),
+        ),
+      );
+
+      expect(find.text('custom-progress'), findsOneWidget);
+      expect(find.text('default'), findsOneWidget);
+      controller.dispose();
+    });
   });
 
   group('Controller safety', () {

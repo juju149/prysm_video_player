@@ -9,3 +9,4 @@
 - Added file cache infrastructure for downloadable network/blob sources.
 - Added PiP, media session, remote command, background audio, notification, DRM, and casting adapter contracts.
 - Added controller events and tests for cache resolution, PiP, remote commands, and casting.
+- Added `PrysmVideoCustomization` with granular builders for loading, errors, controls, progress, settings, track pickers, subtitles, bars, gestures, keyboard shortcuts, and TV focus.

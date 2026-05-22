@@ -9,6 +9,7 @@ export 'src/core/prysm_video_config.dart';
 export 'src/core/prysm_video_event.dart';
 export 'src/core/prysm_video_labels.dart';
 export 'src/core/prysm_video_state.dart';
+export 'src/customization/prysm_video_customization.dart';
 export 'src/data_source/prysm_video_source.dart';
 export 'src/desktop/prysm_desktop_shortcuts.dart';
 export 'src/drm/prysm_drm_config.dart';

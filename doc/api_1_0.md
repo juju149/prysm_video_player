@@ -15,6 +15,7 @@ package intentionally moves to a new major version.
 - `PrysmVideoState`
 - `PrysmVideoEvent`
 - `PrysmVideoError`
+- `PrysmVideoCustomization`
 - `PrysmPlaybackBackend`
 - `MediaKitPlaybackBackend`
 - track, subtitle, thumbnail, cache, DRM, PiP, web policy, and TV focus models
@@ -74,6 +75,7 @@ quality, subtitles, DRM metadata, and protected source signaling.
 The stable customization slots are:
 
 - whole-controls replacement through `PrysmVideoControlsBuilder`
+- fine-grained UI replacement through `PrysmVideoCustomization`
 - headless rendering through `PrysmVideoSurface`
 - theme replacement through `PrysmVideoTheme`
 - labels through `PrysmVideoLabels`
@@ -87,6 +89,11 @@ The stable customization slots are:
 - media sessions, notifications, background audio, and remote commands through
   `PrysmMediaIntegration`
 - Chromecast, AirPlay, DLNA, or proprietary casting through `PrysmCastAdapter`
+
+The fine-grained 1.0 customization surface includes loading, error, controls
+overlay, progress bar, settings menu, speed picker, quality picker, subtitle
+picker, audio picker, subtitle renderer, top bar, bottom bar, gesture wrapper,
+keyboard shortcut handler, and TV focus builder.
 
 Future granular slots such as top bar, bottom bar, progress bar, settings menu,
 loading overlay, and error overlay should be additive. Existing users must be
